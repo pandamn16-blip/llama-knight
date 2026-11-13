@@ -5,6 +5,7 @@ import { BALANCE } from '../config/balance';
 import type { RunState, RunPhase } from '../state/RunState';
 import type { Player } from '../entities/Player';
 import type { EnemySystem, Enemy } from './EnemySystem';
+import type { ArcherSystem, Archer } from './ArcherSystem';
 import type { StructureSystem, Crate } from './StructureSystem';
 import { WEAPONS } from '../weapons/definitions';
 import { SWORD_SLASH_EFFECT, hasSwordSlashEffect } from '../weapons/slashEffect';
@@ -21,7 +22,7 @@ export class CombatSystem {
     constructor(
         private scene: Phaser.Scene, private run: RunState, private player: Player,
         private enemySystem: EnemySystem, private onKill: (x: number, y: number) => void,
-        private onDeath: () => void, private onChanged: () => void, private onDamage: () => void = () => {}, private structures?: StructureSystem
+        private onDeath: () => void, private onChanged: () => void, private onDamage: () => void = () => {}, private structures?: StructureSystem, private archers?: ArcherSystem
     ) {
         scene.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroy, this);
     }
@@ -34,6 +35,13 @@ export class CombatSystem {
         if (this.player.isShielding && sourceDirection === this.player.facing) this.blockImpact();
         else this.takeDamage(enemy.damage);
         return true;
+    }
+
+    resolveArcherArrow(arrowX: number): void {
+        if (this.run.phase !== 'playing') return;
+        const direction = arrowX < this.player.x ? -1 : 1;
+        if (this.player.isShielding && this.player.facing === direction) this.blockImpact();
+        else this.takeDamage(1);
     }
 
     attack() {
@@ -133,7 +141,7 @@ export class CombatSystem {
             const fromX = shot.sprite.x;
             const step = Math.min(shot.remaining, shot.speed * dt);
             const toX = fromX + step * shot.direction;
-            let target: Enemy | Crate | undefined;
+            let target: Enemy | Archer | Crate | undefined;
             // Sweep the segment so a fast shot cannot skip a thin enemy between frames.
             // Hit the nearest enemy along the path, regardless of spawn array order.
             for (const enemy of this.targets) {
@@ -153,13 +161,15 @@ export class CombatSystem {
         }
     }
 
-    private get targets(): readonly (Enemy | Crate)[] {
-        return this.structures ? [...this.enemySystem.enemies, ...this.structures.crates] : this.enemySystem.enemies;
+    private get targets(): readonly (Enemy | Archer | Crate)[] {
+        return [...this.enemySystem.enemies, ...(this.archers?.archers ?? []), ...(this.structures?.crates ?? [])];
     }
 
-    private hitTarget(target: Enemy | Crate, damage: number): void {
+    private hitTarget(target: Enemy | Archer | Crate, damage: number): void {
         if ('placement' in target) this.structures?.damageCrate(target, damage);
-        else this.hitEnemy(target, damage);
+        else if ('kind' in target && target.kind === 'archer') {
+            this.archers?.damage(target, damage);
+        } else this.hitEnemy(target as Enemy, damage);
     }
 
     private hitEnemy(enemy: Enemy, damage: number): void {
