@@ -16,4 +16,5 @@ jobs:
       - run: npm ci
       - run: npx tsc --noEmit
       - run: node --test tests/reliability.cjs
+      - run: node --test tests/terrain.cjs
       - run: npm run build-nolog
