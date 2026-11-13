@@ -58,7 +58,7 @@ export function generateSection(index: number, runSeed: number): WorldSection {
     for (let x = WORLD.enemyStartX + first * WORLD.enemySpacing; x < endX; x += WORLD.enemySpacing) {
         if (safeGround(x)) enemies.push({ id: breadPlacementId(runSeed, x), kind: 'bread', x });
     }
-    const structures: StructurePlacement[] = STRUCTURES.crate.offsets.map((offset, slot) => ({
+    const structures: StructurePlacement[] = STRUCTURES.crate.offsets.map<CratePlacement>((offset, slot) => ({
         id: `${runSeed >>> 0}:${index}:crate:${slot}`, kind: 'crate',
         x: startX + offset + (index === 0 && slot === 0 ? 0 :
             sectionSeed(runSeed ^ 0x43524154, index * 2 + slot) % (2 * STRUCTURES.crate.jitter + 1) - STRUCTURES.crate.jitter),
