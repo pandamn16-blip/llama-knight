@@ -53,6 +53,42 @@ export class ArcherSystem {
 
     get archers(): readonly Archer[] { return [...this.active.values()]; }
 
+    private topY(archer: Archer): number { return archer.sprite.y - ARCHER.standHeight; }
+
+    isPlayerStandingOn(archer: Archer, playerX: number, playerY: number): boolean {
+        return archer.hp > 0 && archer.sprite.active &&
+            Math.abs(playerX - archer.sprite.x) <= ARCHER.standHalfWidth &&
+            Math.abs(playerY + BALANCE.player.groundOffset - this.topY(archer)) < 3;
+    }
+
+    playerStandingOnPyromancer(): boolean {
+        return this.archers.some(archer =>
+            this.isPlayerStandingOn(archer, this.player.x, this.player.y));
+    }
+
+    landingY(x: number, previousFoot: number, nextFoot: number): number | undefined {
+        if (nextFoot < previousFoot) return undefined;
+        let landing: number | undefined;
+        for (const archer of this.active.values()) {
+            if (archer.hp <= 0 || !archer.sprite.active ||
+                Math.abs(x - archer.sprite.x) > ARCHER.standHalfWidth) continue;
+            const top = this.topY(archer);
+            if (previousFoot <= top + 1 && nextFoot >= top &&
+                (landing === undefined || top < landing)) landing = top;
+        }
+        return landing;
+    }
+
+    standingY(x: number, foot: number): number | undefined {
+        for (const archer of this.active.values()) {
+            if (archer.hp <= 0 || !archer.sprite.active ||
+                Math.abs(x - archer.sprite.x) > ARCHER.standHalfWidth) continue;
+            const top = this.topY(archer);
+            if (Math.abs(foot - top) < 3) return top;
+        }
+        return undefined;
+    }
+
     // Same swept body-blocking as Bread, limited to overlapping heights.
     resolvePlayerMovement(from: number, to: number, y: number): number {
         for (const archer of this.active.values()) {
@@ -70,6 +106,8 @@ export class ArcherSystem {
     }
 
     private walk(archer: Archer, target: number, speed: number, dt: number): boolean {
+        // Prevent patrolling out from under a player standing on the flames.
+        if (this.isPlayerStandingOn(archer, this.player.x, this.player.y)) return false;
         const from = archer.sprite.x;
         const clampedTarget = Math.max(archer.minX, Math.min(archer.maxX, target));
         let to = from + Math.sign(clampedTarget - from) * Math.min(Math.abs(clampedTarget - from), speed * dt);
