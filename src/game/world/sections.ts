@@ -66,7 +66,7 @@ export function generateSection(index: number, runSeed: number): WorldSection {
     }
     return { id: `${runSeed >>> 0}:${index}`, index, startX, endX,
         seed: sectionSeed(runSeed, index), sceneryXs, enemies, structures,
-        platforms: generatePlatforms(index, runSeed) };
+        platforms: generatePlatforms(index, runSeed, sectionSeed(runSeed ^ 0x54455252, index)) };
 }
 
 export function sectionWindow(scrollX: number, width: number, viewports: number): { first: number; last: number } {
