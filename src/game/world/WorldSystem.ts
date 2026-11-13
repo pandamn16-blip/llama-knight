@@ -6,6 +6,7 @@ import { generateSection, sectionWindow } from './sections';
 import type { WorldSection } from './sections';
 import { landingSurfaceY, standingSurfaceY } from './terrain';
 import type { TerrainPlatform } from './terrain';
+import type { Landmark } from './landmarks';
 import { terrainTexture, ENVIRONMENT_ASSETS } from './environmentAssets';
 
 type SectionVisuals = {
@@ -75,6 +76,66 @@ export class WorldSystem {
         return result;
     }
 
+    // Landmarks create visual rhythm without changing combat collision. Later
+    // artwork can replace each composition through the environment manifest.
+    private drawLandmark(landmark: Landmark): GameObjects.GameObject[] {
+        const x = landmark.x, y = this.groundY, scale = landmark.scale;
+        const key = `breadlands:${landmark.kind}`;
+        const sizes: Record<Landmark['kind'], [number, number]> = {
+            arch: [160, 172], watchtower: [110, 226], ruins: [172, 112],
+            fence: [190, 70], boulders: [145, 80], sign: [70, 100]
+        };
+        if (terrainTexture(this.scene, key)) {
+            const [width, height] = sizes[landmark.kind];
+            return [this.scene.add.image(x, y, key).setOrigin(0.5, 1)
+                .setDisplaySize(width * scale, height * scale).setFlipX(landmark.flip).setDepth(0)];
+        }
+        const result: GameObjects.GameObject[] = [];
+        const rect = (dx: number, dy: number, w: number, h: number, colour: number) => {
+            result.push(this.scene.add.rectangle(x + dx * scale, y + dy * scale,
+                w * scale, h * scale, colour).setDepth(0));
+        };
+        const oval = (dx: number, dy: number, w: number, h: number, colour: number) => {
+            result.push(this.scene.add.ellipse(x + dx * scale, y + dy * scale,
+                w * scale, h * scale, colour).setDepth(0));
+        };
+        switch (landmark.kind) {
+            case 'arch':
+                rect(-56, -72, 24, 144, 0x827e73); rect(56, -72, 24, 144, 0x827e73);
+                rect(0, -148, 144, 20, 0xaaa190);
+                rect(0, -158, 165, 10, 0x6c8771);
+                break;
+            case 'watchtower':
+                rect(-36, -94, 16, 188, 0x75634c); rect(36, -94, 16, 188, 0x75634c);
+                rect(0, -172, 118, 18, 0x986e48);
+                rect(0, -205, 98, 12, 0x6c8771);
+                rect(-48, -190, 12, 36, 0x6d4d30); rect(48, -190, 12, 36, 0x6d4d30);
+                break;
+            case 'ruins':
+                rect(-60, -42, 36, 84, 0x918f83);
+                rect(60, -55, 34, 110, 0xaaa697);
+                rect(-25, -90, 120, 16, 0xa5a195);
+                rect(33, -17, 86, 32, 0x7e8b71);
+                break;
+            case 'fence':
+                rect(0, -28, 190, 10, 0xa57d54);
+                rect(0, -55, 190, 8, 0xc4a074);
+                for (const dx of [-78, -26, 26, 78]) rect(dx, -38, 13, 76, 0x78583b);
+                break;
+            case 'boulders':
+                oval(-38, -25, 78, 52, 0x81877f);
+                oval(30, -34, 94, 66, 0xa2a59a);
+                oval(6, -8, 55, 26, 0x697b68);
+                break;
+            case 'sign':
+                rect(0, -44, 11, 88, 0x7c5334);
+                rect(8, -77, 75, 33, 0xc99d64);
+                rect(11, -77, 55, 5, 0x765135);
+                break;
+        }
+        return result;
+    }
+
     private drawSection(data: WorldSection): SectionVisuals {
         const objects: GameObjects.GameObject[] = [];
         const scenery = data.sceneryXs.map(x => this.scene.add.rectangle(x, this.groundY - 115,
@@ -102,6 +163,7 @@ export class WorldSystem {
                     objects.push(this.tile(x, y, tile, tile, 'breadlands:ground-fill', 0x65865b, 1));
         }
         for (const platform of data.platforms) objects.push(...this.drawPlatform(platform));
+        for (const landmark of data.landmarks) objects.push(...this.drawLandmark(landmark));
         return { data, objects, scenery };
     }
 
