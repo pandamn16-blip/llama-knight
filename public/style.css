@@ -1,0 +1,60 @@
+html, body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+    color: rgba(255, 255, 255, 0.87);
+    background-color: #0f0f0f;
+}
+
+#app {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    box-sizing: border-box;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+        env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+    overflow: hidden;
+}
+
+#game-container {
+    width: 100%;
+    height: 100%;
+}
+
+#game-container canvas {
+    display: block;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+}
+
+#rotate-message {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    box-sizing: border-box;
+    padding: 24px;
+    background: #151527;
+    color: #ffffff;
+    font: bold 22px/1.6 Arial, sans-serif;
+    text-align: center;
+    align-items: center;
+    justify-content: center;
+    touch-action: none;
+}
+
+#rotate-message span {
+    font-size: 16px;
+    font-weight: normal;
+}
+
+@media (orientation: portrait) {
+    #rotate-message { display: flex; }
+}
