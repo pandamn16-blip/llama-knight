@@ -30,7 +30,7 @@ export class Hud {
             `${CHARACTERS[run.characterId].name}     ♥ ${run.health}/${run.maxHealth}     ${WEAPONS[run.weapon.id].name}`,
             `LEVEL ${run.level}    XP ${run.xp}/${xpNeeded}`,
             `BREAD ${run.kills}    DISTANCE ${Math.floor(run.distance)}m`,
-            `J = ATTACK    |    1 / 2 / 3 = PICK UPGRADE`
+            `J = ATTACK${CHARACTERS[run.characterId].canShield ? '    |    Hold K — Shield' : ''}    |    1 / 2 / 3 = PICK UPGRADE`
         ]);
     }
 }

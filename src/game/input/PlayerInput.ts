@@ -131,6 +131,7 @@ export class PlayerInput {
     private makeTouchButton(x: number, y: number, label: string,
         action: TouchAction, mobile = false) {
         const button = this.scene.add.circle(x, y, mobile ? 70 : 35, 0x25263f, 0.74).setDepth(30).setScrollFactor(0).setInteractive();
+        if (action === 'shield') button.setStrokeStyle(3, 0xffdf7c);
         const text = this.scene.add.text(x, y, label, { fontSize: mobile ? '28px' : label.length > 2 ? '13px' : '25px', color: '#ffffff' })
             .setOrigin(0.5).setDepth(31).setScrollFactor(0);
         const press = (pointer: Input.Pointer) => {

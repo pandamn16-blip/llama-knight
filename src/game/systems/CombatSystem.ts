@@ -32,7 +32,7 @@ export class CombatSystem {
         if (dx < 0 || dx > BREAD.attackRange || Math.abs(enemy.sprite.y - this.player.y) > BREAD.attackHeight) return false;
         const sourceDirection = Math.sign(enemy.sprite.x - this.player.x) || -enemy.brain.facing;
         if (this.player.isShielding && sourceDirection === this.player.facing) this.blockImpact();
-        else this.takeDamage();
+        else this.takeDamage(enemy.damage);
         return true;
     }
 
@@ -191,11 +191,11 @@ export class CombatSystem {
         this.tweens.add(tween);
     }
 
-    private takeDamage() {
+    private takeDamage(amount = 1) {
         if (this.run.phase !== 'playing') return;
         if ((this.run.runTime * 1000) - this.run.lastDamage < BALANCE.player.damageCooldown) return;
         this.run.lastDamage = (this.run.runTime * 1000);
-        this.run.health--;
+        this.run.health -= amount;
         this.player.showHurt();
         this.onDamage();
         this.scene.cameras.main.shake(BALANCE.effects.shakeDuration, BALANCE.effects.shakeIntensity);

@@ -486,7 +486,7 @@ console.log('PASS characters: exact starting stats, independent weapon state, sh
     for (const x of [650, 500]) {
         g.enemySystem.spawnBread(WORLD.enemyStartX + g.enemySystem.enemies.length * WORLD.enemySpacing);
         const enemy = g.enemySystem.enemies.at(-1);
-        enemy.sprite.x = x; enemy.sprite.y = g.player.y;
+        enemy.sprite.x = x; enemy.sprite.y = g.player.y; enemy.hp = 1;
     }
     const far = g.enemySystem.enemies[0];
     g.combatSystem.attack();
@@ -751,7 +751,7 @@ function installCharacterSprites(scene, width, height, missingFrame) {
     };
     scene.add.sprite = (x, y, key, frame) => {
         const sprite = scene.add.image(x, y, key, frame);
-        sprite.plays = [];
+        sprite.plays = []; sprite.texture = { key };
         sprite.setFlipX = value => { sprite.flipX = value; return sprite; };
         sprite.setOrigin = (ox, oy) => { sprite.originX = ox; sprite.originY = oy; return sprite; };
         sprite.setScale = scale => { sprite.scale = scale; return sprite; };
@@ -1115,7 +1115,7 @@ for (const characterId of ['llamaCrunch', 'candy']) {
     const { game: g } = fixture('candy'); g.player.facing = -1;
     for (const x of [100, 160, 450]) {
         g.enemySystem.spawnBread(WORLD.enemyStartX + g.enemySystem.enemies.length * WORLD.enemySpacing); const enemy = g.enemySystem.enemies.at(-1);
-        enemy.sprite.x = x; enemy.sprite.y = g.player.y;
+        enemy.sprite.x = x; enemy.sprite.y = g.player.y; enemy.hp = 1;
     }
     g.combatSystem.attack(); const shot = g.combatSystem.projectiles[0];
     assert.equal(shot.sprite.x, 270); assert.equal(shot.direction, -1); assert.equal(shot.sprite.scaleX, 1);
@@ -1339,7 +1339,7 @@ for (const characterId of ['llamaCrunch', 'candy']) {
     g.enemySystem.spawnBread(WORLD.enemyStartX + WORLD.enemySpacing * 8); const second = g.enemySystem.enemies[1];
     assert.equal(second.sprite.x - first.sprite.x, WORLD.enemySpacing * 8);
     assert.equal(second.sprite.x, WORLD.enemyStartX + WORLD.enemySpacing * 8);
-    assert.equal(second.hp, 2); assert.ok(second.speed >= 175 && second.speed <= 235);
+    assert.equal(second.hp, 6); assert.equal(second.speed, 125);
     assert.equal(first.hp, second.hp);
     g.enemySystem.update(0.05, () => {});
     assert.equal(first.sprite.active, false); // Distant sprite unloads; health remains in its record.
@@ -1354,7 +1354,7 @@ for (const characterId of ['llamaCrunch', 'candy']) {
     const { game: g } = fixture('candy');
     g.cameras.main.setScroll(6000, 0); g.player.x = 6500;
     g.enemySystem.spawnBread(); const enemy = g.enemySystem.enemies[0];
-    enemy.sprite.x = 6750; enemy.sprite.y = g.player.y;
+    enemy.sprite.x = 6750; enemy.sprite.y = g.player.y; enemy.hp = 1;
     g.combatSystem.attack();
     const shot = g.combatSystem.projectiles[0];
     g.combatSystem.update(0.2);
@@ -2011,7 +2011,7 @@ console.log('PASS mobile UX: aspect-preserving viewport sizing, independent joys
     const enemy = g.enemySystem.spawnBread(700);
     for (const [time, expectedHp] of [[0, 2], [0.9, 1], [1.8, 0]]) {
         g.run.runTime = time; g.combatSystem.attack(); g.combatSystem.update(0.2);
-        assert.equal(crate.hp, expectedHp); assert.equal(enemy.hp, 1);
+        assert.equal(crate.hp, expectedHp); assert.equal(enemy.hp, enemy.maxHealth);
         assert.equal(g.combatSystem.projectiles.length, 0, 'Crate impact consumes a non-piercing shot');
     }
     assert.equal(g.xpSystem.gems.length, 1); assert.equal(g.run.kills, 0);
@@ -2171,7 +2171,7 @@ console.log('PASS Stage 2C: deterministic early/later chests, contextual tap/E i
 {
     const { game: g } = fixture(); g.enemySystem.player = g.player;
     const enemy = g.enemySystem.spawnBread(2500); enemy.hp = 7; g.enemySystem.damage(enemy, 2);
-    g.cameras.main.setScroll(2200, 0); g.player.x = 2800;
+    g.cameras.main.setScroll(2200, 0); g.player.x = 2750;
     for (let i = 0; i < 25; i++) g.enemySystem.update(0.05, () => false);
     assert.ok(enemy.sprite.x > 2560); const x = enemy.sprite.x, brain = JSON.stringify(enemy.brain), id = enemy.placementId;
     g.cameras.main.setScroll(20000, 0); g.enemySystem.prepare(); assert.equal(enemy.sprite.active, false);
@@ -2241,3 +2241,71 @@ for (const character of ['llamaCrunch', 'candy']) {
     assert.equal(source.width / source.frameSize, 3); assert.equal(png[25], 6);
 }
 console.log('PASS shielding: front/back/left blocks at impact, late raise/release, unchanged Candy, movement/jump/attack restoration, four independent fingers, cleanup and native shield sheet.');
+
+// Regional balance is fixed at original placement, never elapsed time or player level.
+{
+    const { BREAD } = load('enemies/bread');
+    const { DIFFICULTY, difficultyRegion } = load('world/difficulty');
+    assert.deepEqual([BREAD.patrolSpeed, BREAD.chaseSpeed, BREAD.detectionRange, BREAD.loseRange,
+        BREAD.windup, BREAD.recovery], [35, 125, 260, 400, 0.35, 0.9]);
+    const boundary = load('config/balance').BALANCE.player.startX + DIFFICULTY.metresPerRegion * WORLD.pixelsPerMetre;
+    assert.equal(difficultyRegion(boundary - 1), 0); assert.equal(difficultyRegion(boundary), 1);
+    const { game: g } = fixture();
+    const early = g.enemySystem.spawnBread(500);
+    assert.equal(early.hp, 6); assert.equal(early.damage, 1); assert.equal(early.difficultyTier, 0);
+    g.run.runTime = 9999; g.run.level = 40; g.run.furthestX = boundary * 20;
+    const waiting = g.enemySystem.spawnBread(700);
+    assert.equal(waiting.hp, early.hp); assert.equal(waiting.speed, 125);
+    const later = g.enemySystem.spawnBread(boundary + 100);
+    assert.equal(later.hp, 7); assert.equal(later.difficultyTier, 1);
+    assert.equal(g.enemySystem.spawnBread(boundary * 20).hp, 10);
+    g.enemySystem.damage(later, 2);
+    g.cameras.main.setScroll(50000, 0); g.enemySystem.prepare();
+    const restored = g.enemySystem.spawnBread(boundary + 100, later.placementId);
+    assert.equal(restored.hp, 5); assert.equal(restored.maxHealth, 7);
+    assert.equal(restored.damage, 1); assert.equal(restored.difficultyTier, 1);
+    g.events.emit('shutdown');
+}
+{
+    const { game: g } = fixture();
+    const enemy = g.enemySystem.spawnBread(g.player.x + 50); enemy.sprite.y = g.player.y;
+    for (const [time, hp] of [[0, 4], [0.5, 2], [1, 0]]) {
+        g.run.runTime = time; g.combatSystem.attack(); assert.equal(enemy.hp, hp);
+    }
+    assert.equal(g.run.kills, 1); assert.equal(g.xpSystem.gems.length, 1);
+    applyUpgrade(g.run, 'power'); applyUpgrade(g.run, 'power');
+    assert.equal(Math.ceil(6 / g.run.weapon.damage), 2);
+    applyUpgrade(g.run, 'power'); applyUpgrade(g.run, 'power');
+    const upgradedTarget = g.enemySystem.spawnBread(g.player.x + 55); upgradedTarget.sprite.y = g.player.y;
+    g.run.runTime = 1.5; g.combatSystem.attack();
+    assert.equal(upgradedTarget.hp, 0); assert.equal(g.run.kills, 2);
+    g.events.emit('shutdown');
+}
+// The non-looping stance ends on frame 1; held input never restarts it.
+{
+    const { game: g } = fixture();
+    const animations = installCharacterSprites(g); registerCharacterAnimations(g);
+    const { CHARACTER_SHIELDS, registerShieldAnimations } = load('characters/shield');
+    const sheet = CHARACTER_SHIELDS.llama, textures = g.textures;
+    g.textures = {
+        exists: key => key === sheet.key || textures.exists(key),
+        get: key => key === sheet.key ? {
+            getSourceImage: () => ({ width: sheet.width, height: sheet.height }),
+            has: name => Number(name) >= 0 && Number(name) < 3,
+            get: () => ({ width: sheet.frameSize, height: sheet.frameSize })
+        } : textures.get(key)
+    };
+    registerShieldAnimations(g);
+    const clip = animations.get(sheet.key);
+    assert.deepEqual(clip.frames.map(frame => frame.frame), [0, 1]); assert.equal(clip.repeat, 0);
+    g.player = new Player(g, g.run, g.groundY);
+    g.player.setShielding(true); assert.equal(g.run.shielding, true);
+    const shield = g.player.visual.shield;
+    shield.anims.isPlaying = false; // Phaser completes once, retaining its last frame.
+    g.player.setShielding(true); g.player.update({ left: true, right: false, jump: false }, 0.01);
+    assert.equal(shield.plays.length, 1); assert.equal(shield.flipX, true); assert.equal(shield.visible, true);
+    g.player.setShielding(false); g.player.update({ left: false, right: false, jump: false }, 0);
+    assert.equal(shield.visible, false); assert.equal(g.player.visual.animated.animationKey, 'llama-crunch:idle');
+    g.events.emit('shutdown');
+}
+console.log('PASS balance polish: fixed regional stats/persistence, capped health growth, three starting sword hits, and non-looping shield frame-1 hold/release/facing.');

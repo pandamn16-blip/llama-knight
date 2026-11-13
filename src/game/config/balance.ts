@@ -15,10 +15,7 @@ export const BALANCE = {
     scenery: { spacing: 160 },
     enemy: {
         spawnOffsetX: 45, groundOffset: 32,
-        minSpeed: 155, maxSpeed: 215, speedPerDifficulty: 10,
-        difficultySeconds: 17, initialHealth: 1, difficultyPerHealth: 2,
-        minSpawnInterval: 0.65, initialSpawnInterval: 1.65,
-        spawnIntervalDivisor: 110, despawnX: -80
+        despawnX: -80
     },
     xp: {
         initialThreshold: 3, thresholdPerLevel: 3, gemValue: 1,

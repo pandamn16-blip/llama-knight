@@ -1,4 +1,5 @@
 import * as Phaser from 'phaser';
+import { difficultyRegion } from '../world/difficulty';
 import { WORLD } from '../config/world';
 import { BALANCE } from '../config/balance';
 import type { Player } from '../entities/Player';
@@ -10,9 +11,9 @@ import { breadPlacementId, generateSection, sectionSeed, sectionWindow } from '.
 
 export type BreadState = 'idle' | 'patrol' | 'chase' | 'windup' | 'active' | 'recover' | 'return';
 type Brain = { state: BreadState; remaining: number; facing: -1 | 1; targetX: number; cycle: number; attackSpent: boolean };
-export type Enemy = { sprite: Phaser.GameObjects.Container; speed: number; hp: number; placementX: number; placementId: string;
+export type Enemy = { sprite: Phaser.GameObjects.Container; speed: number; hp: number; maxHealth: number; damage: number; difficultyTier: number; placementX: number; placementId: string;
     brain: Brain; twig?: Phaser.GameObjects.Rectangle; art?: Phaser.GameObjects.Sprite; alert: Phaser.GameObjects.Text; animation?: BreadAnimation; deathElapsed?: number };
-type EnemyRecord = { hp: number; speed: number; defeated: boolean; x: number; placementX: number; brain: Brain };
+type EnemyRecord = { hp: number; maxHealth: number; damage: number; difficultyTier: number; speed: number; defeated: boolean; x: number; placementX: number; brain: Brain };
 
 export class EnemySystem {
     private items: Enemy[] = [];
@@ -129,7 +130,7 @@ export class EnemySystem {
                 brain.facing = dx < 0 ? -1 : 1;
                 if (distance <= BREAD.meleeStop && closeHeight <= BREAD.attackHeight) {
                     brain.state = 'windup'; brain.remaining = BREAD.windup;
-                } else this.move(enemy, player.x, BREAD.chaseSpeed, dt);
+                } else this.move(enemy, player.x, enemy.speed, dt);
                 break;
             case 'windup':
                 brain.remaining -= dt;
@@ -197,12 +198,11 @@ export class EnemySystem {
         let record = this.records.get(id);
         if (record?.defeated) return;
         if (!record) {
-            const difficulty = Math.floor(this.run.runTime / BALANCE.enemy.difficultySeconds);
+            const difficultyTier = difficultyRegion(worldX);
+            const maxHealth = BREAD.initialHealth + Math.min(BREAD.maxHealthBonus, difficultyTier * BREAD.healthPerRegion);
             const speedRoll = sectionSeed(this.run.seed, worldX) / 0x100000000;
             record = {
-                speed: BALANCE.enemy.minSpeed + Math.floor(speedRoll * (BALANCE.enemy.maxSpeed - BALANCE.enemy.minSpeed + 1)) +
-                    difficulty * BALANCE.enemy.speedPerDifficulty,
-                hp: BALANCE.enemy.initialHealth + Math.floor(difficulty / BALANCE.enemy.difficultyPerHealth),
+                speed: BREAD.chaseSpeed, hp: maxHealth, maxHealth, damage: BREAD.damage, difficultyTier,
                 defeated: false, x: worldX, placementX: worldX,
                 brain: { state: 'idle', remaining: BREAD.idleMin + speedRoll * (BREAD.idleMax - BREAD.idleMin),
                     facing: -1, targetX: worldX, cycle: 0, attackSpent: false }
@@ -231,7 +231,7 @@ export class EnemySystem {
         const alert = this.scene.add.text(0, -62, '!', { fontSize: '28px', color: '#ffe19a', backgroundColor: '#70452f' })
             .setOrigin(0.5).setVisible(false);
         sprite.add(alert);
-        const enemy: Enemy = { sprite, art, twig, alert, brain: record.brain, speed: record.speed, hp: record.hp,
+        const enemy: Enemy = { sprite, art, twig, alert, brain: record.brain, speed: record.speed, hp: record.hp, maxHealth: record.maxHealth, damage: record.damage, difficultyTier: record.difficultyTier,
             placementX: record.placementX, placementId: id };
         this.syncVisual(enemy);
         this.items.push(enemy);
