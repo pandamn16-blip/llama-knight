@@ -86,6 +86,8 @@ export class Game extends Phaser.Scene {
 
         this.enemySystem = new EnemySystem(this, this.run, this.groundY, this.player);
         this.enemySystem.setTerrain(this.world);
+        this.enemySystem.setWallResolver((from, to, y) =>
+            this.world.resolvePlayerMovement(from, to, y));
         this.enemySystem.prepare(); // Before the first gameplay render, including both approach buffers.
         this.xpSystem = new XpSystem(this, this.run, this.player,
             () => this.openLevelUp(), () => this.updateHud());
@@ -281,7 +283,8 @@ export class Game extends Phaser.Scene {
             const trappedAtStart = this.hazardSystem?.isPlayerTrapped ?? false;
             this.player.update(trappedAtStart ? { left: false, right: false, jump: false } : actions, dt,
                 (from, to, y) => this.archerSystem.resolvePlayerMovement(from,
-                    this.enemySystem.resolvePlayerMovement(from, to, y), y),
+                    this.enemySystem.resolvePlayerMovement(from,
+                        this.world.resolvePlayerMovement(from, to, y), y), y),
                 {
                     landingY: (x, prev, next) => {
                         const hits = surfaces.map(surface => surface.landingY(x, prev, next))
@@ -291,6 +294,8 @@ export class Game extends Phaser.Scene {
                     standingY: (x, foot) => surfaces.map(surface => surface.standingY(x, foot))
                         .find(value => value !== undefined)
                 });
+            this.world.advance(dt, this.player.x,
+                this.player.y + BALANCE.player.groundOffset);
             // A missed pit jump is a genuine fall, not an endless descent.
             // No fall hazard exists in the introductory section.
             if (this.player.y > this.scale.height + 90) {

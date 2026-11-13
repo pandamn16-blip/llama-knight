@@ -21,9 +21,9 @@ export class CombatSystem {
     private slashes = new Set<Phaser.GameObjects.Container | Phaser.GameObjects.Sprite>();
     private fireTicks = new Set<Phaser.GameObjects.Text>();
     private damageTicks = new Set<Phaser.GameObjects.Text>();
-    private terrain?: Pick<WorldSystem, 'terrainImpact'>;
+    private terrain?: Pick<WorldSystem, 'terrainImpact' | 'damageAtImpact' | 'strikeTerrain'>;
 
-    setTerrain(terrain: Pick<WorldSystem, 'terrainImpact'>): void { this.terrain = terrain; }
+    setTerrain(terrain: Pick<WorldSystem, 'terrainImpact' | 'damageAtImpact' | 'strikeTerrain'>): void { this.terrain = terrain; }
 
     constructor(
         private scene: Phaser.Scene, private run: RunState, private player: Player,
@@ -128,6 +128,11 @@ export class CombatSystem {
                 this.hitTarget(enemy, this.run.weapon.damage);
             }
         }
+        if (definition.kind === 'melee') {
+            const hit = this.terrain?.strikeTerrain(this.player.x, this.player.y,
+                direction, range, this.run.weapon.damage);
+            if (hit) this.showDamageNumber(hit.amount, hit.x, hit.y, 'crate');
+        }
     }
 
     private playSlashEffect(range: number, direction: -1 | 1): void {
@@ -174,10 +179,24 @@ export class CombatSystem {
                     enemy.sprite.x - shot.halfWidth <= Math.max(fromX, toX) &&
                     (!target || (enemy.sprite.x - target.sprite.x) * shot.direction < 0)) target = enemy;
             }
-            shot.sprite.x = toX;
+            // Terrain can stop candy shots too. Whichever object is contacted
+            // first along this step takes the hit; no shooting through walls.
+            const terrainHit = this.terrain?.terrainImpact(fromX, shot.sprite.y,
+                toX, shot.sprite.y);
+            const enemyFirst = target && (!terrainHit ||
+                (target.sprite.x - fromX) * shot.direction <=
+                    (terrainHit.x - fromX) * shot.direction);
+            if (enemyFirst && target) this.hitTarget(target, shot.damage);
+            else if (terrainHit) {
+                const dealt = this.terrain?.damageAtImpact(terrainHit.x, terrainHit.y,
+                    shot.damage) ?? 0;
+                if (dealt > 0) this.showDamageNumber(dealt,
+                    terrainHit.x, terrainHit.y, 'crate');
+            }
+            shot.sprite.x = terrainHit && !enemyFirst ? terrainHit.x : toX;
             shot.remaining -= step;
-            if (target) this.hitTarget(target, shot.damage);
-            if (target || shot.remaining <= 0 || shot.sprite.x > this.scene.cameras.main.scrollX + this.scene.cameras.main.width + 50 ||
+            if (enemyFirst || terrainHit || shot.remaining <= 0 ||
+                shot.sprite.x > this.scene.cameras.main.scrollX + this.scene.cameras.main.width + 50 ||
                 shot.sprite.x < this.scene.cameras.main.scrollX - 50) {
                 shot.sprite.destroy();
                 this.projectiles.splice(i, 1);
