@@ -32,7 +32,8 @@ export type Archer = {
     attackKind?: 'attack' | 'bonk';
 };
 type ArcherRecord = { hp: number; dead: boolean; x?: number; patrolDirection?: -1 | 1 };
-type Arrow = { sprite: GameObjects.Container | GameObjects.Sprite; vx: number; vy: number; distance: number };
+type Arrow = { sprite: GameObjects.Container | GameObjects.Sprite; vx: number; vy: number;
+    distance: number; impactRemaining?: number };
 type Dying = { sprite: GameObjects.Container; elapsed: number };
 
 // Pyromancers patrol their own raised ledges without changing Bread's ground AI.
@@ -91,6 +92,9 @@ export class ArcherSystem {
             name === 'death' ? hasPyromancerDeath(this.scene) : hasPyromancerIdle(this.scene);
         if (!available) return;
         archer.animation = name;
+        // These are visual-only transforms: collision and foot anchor stay fixed.
+        // attack.png's character was authored smaller inside the frame than idle.png.
+        archer.art.setScale(sheet.scale);
         archer.art.play(sheet.animationKey);
     }
 
@@ -274,21 +278,47 @@ export class ArcherSystem {
         }
         for (let i = this.arrows.length - 1; i >= 0; i--) {
             const arrow = this.arrows[i], { sprite } = arrow;
+            if (arrow.impactRemaining !== undefined) {
+                // A real impact already dealt its damage exactly once. Let frame 5
+                // flash briefly on the hit location; never move or damage again.
+                arrow.impactRemaining -= dt;
+                if (arrow.impactRemaining <= 0) {
+                    sprite.destroy();
+                    this.arrows.splice(i, 1);
+                }
+                continue;
+            }
             const fromX = sprite.x, fromY = sprite.y;
             const distance = Math.hypot(arrow.vx, arrow.vy) * dt;
             const toX = fromX + arrow.vx * dt, toY = fromY + arrow.vy * dt;
-            // Swept point-to-segment distance avoids fast arrows tunnelling.
+            // Swept point-to-segment distance avoids fast projectiles tunnelling.
             const vx = toX - fromX, vy = toY - fromY;
             const t = Math.max(0, Math.min(1, ((this.player.x - fromX) * vx +
                 (this.player.y - fromY) * vy) / (vx * vx + vy * vy || 1)));
             const hit = Math.hypot(fromX + vx * t - this.player.x,
                 fromY + vy * t - this.player.y) < ARCHER.arrowHitRadius;
-            sprite.x = toX; sprite.y = toY;
             arrow.distance += distance;
-            if (hit) this.onArrowHit(arrow.vx >= 0 ? -1 : 1);
-            if (hit || arrow.distance >= ARCHER.projectileRange ||
-                sprite.x < camera.scrollX - 100 || sprite.x > camera.scrollX + camera.width + 100) {
-                sprite.destroy(); this.arrows.splice(i, 1);
+            if (hit) {
+                // Stop at the actual swept contact point. Frame 5 is exclusively
+                // the hit effect; frame 4 remains displayed during flight.
+                sprite.x = fromX + vx * t;
+                sprite.y = fromY + vy * t;
+                if ('setFrame' in sprite && hasPyromancerFireball(this.scene)) {
+                    sprite.anims.stop();
+                    sprite.setFrame(PYROMANCER_FIREBALL.impactFrame);
+                    arrow.impactRemaining = 0.13;
+                } else {
+                    sprite.destroy();
+                    this.arrows.splice(i, 1);
+                }
+                this.onArrowHit(arrow.vx >= 0 ? -1 : 1);
+            } else {
+                sprite.x = toX; sprite.y = toY;
+                if (arrow.distance >= ARCHER.projectileRange ||
+                    sprite.x < camera.scrollX - 100 || sprite.x > camera.scrollX + camera.width + 100) {
+                    sprite.destroy();
+                    this.arrows.splice(i, 1);
+                }
             }
             if (this.run.phase !== 'playing') break;
         }
