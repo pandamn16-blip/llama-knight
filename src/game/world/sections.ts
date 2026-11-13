@@ -1,7 +1,8 @@
 import { WORLD } from '../config/world';
 import { BALANCE } from '../config/balance';
 import { STRUCTURES } from '../config/structures';
-import { generatePlatforms } from './terrain';
+import { generatePlatforms, generateTerrainGaps, groundExists, terrainLayoutKind } from './terrain';
+import type { TerrainGap, TerrainLayoutKind } from './terrain';
 import type { TerrainPlatform } from './terrain';
 import { generateLandmarks } from './landmarks';
 import type { Landmark } from './landmarks';
@@ -17,6 +18,8 @@ export interface WorldSection {
     enemies: BreadPlacement[];
     structures: StructurePlacement[];
     platforms: TerrainPlatform[];
+    gaps: TerrainGap[];
+    layout: TerrainLayoutKind;
     landmarks: Landmark[];
 }
 
@@ -43,6 +46,9 @@ export function sectionSeed(runSeed: number, index: number): number {
 export function generateSection(index: number, runSeed: number): WorldSection {
     const startX = index * WORLD.sectionLength;
     const endX = startX + WORLD.sectionLength;
+    const gaps = generateTerrainGaps(index, sectionSeed(runSeed ^ 0x54455252, index));
+    const safeGround = (x: number) => groundExists(x, gaps) &&
+        gaps.every(gap => x < gap.start - 72 || x > gap.end + 72);
     const sceneryXs: number[] = [];
     const enemies: BreadPlacement[] = [];
     for (let x = Math.ceil(startX / BALANCE.scenery.spacing) * BALANCE.scenery.spacing;
@@ -50,18 +56,19 @@ export function generateSection(index: number, runSeed: number): WorldSection {
     // Preserve the existing bread density and initial encounter position.
     const first = Math.max(0, Math.ceil((startX - WORLD.enemyStartX) / WORLD.enemySpacing));
     for (let x = WORLD.enemyStartX + first * WORLD.enemySpacing; x < endX; x += WORLD.enemySpacing) {
-        enemies.push({ id: breadPlacementId(runSeed, x), kind: 'bread', x });
+        if (safeGround(x)) enemies.push({ id: breadPlacementId(runSeed, x), kind: 'bread', x });
     }
-    const structures: StructurePlacement[] = STRUCTURES.crate.offsets.map((offset, slot) => ({
+    const structures: StructurePlacement[] = STRUCTURES.crate.offsets.map<CratePlacement>((offset, slot) => ({
         id: `${runSeed >>> 0}:${index}:crate:${slot}`, kind: 'crate',
         x: startX + offset + (index === 0 && slot === 0 ? 0 :
             sectionSeed(runSeed ^ 0x43524154, index * 2 + slot) % (2 * STRUCTURES.crate.jitter + 1) - STRUCTURES.crate.jitter),
         healthDrop: sectionSeed(runSeed ^ 0x4845414c, index * 2 + slot) / 0x100000000 < STRUCTURES.crate.healthDropChance
-    }));
+    })).filter(item => safeGround(item.x));
     if (index === 0 || index % STRUCTURES.chest.everySections === 0) {
         const rewards: ChestReward[] = ['xp', 'heal', 'upgrade'];
         const roll = sectionSeed(runSeed ^ 0x43484553, index);
-        structures.push({ id: `${runSeed >>> 0}:${index}:chest:0`, kind: 'chest',
+        if (safeGround(index === 0 ? STRUCTURES.chest.firstX : startX + STRUCTURES.chest.offset +
+            roll % (2 * STRUCTURES.chest.jitter + 1) - STRUCTURES.chest.jitter)) structures.push({ id: `${runSeed >>> 0}:${index}:chest:0`, kind: 'chest',
             x: index === 0 ? STRUCTURES.chest.firstX : startX + STRUCTURES.chest.offset +
                 roll % (2 * STRUCTURES.chest.jitter + 1) - STRUCTURES.chest.jitter,
             reward: index === 0 ? 'upgrade' : rewards[sectionSeed(runSeed ^ 0x52455744, index) % rewards.length]
@@ -75,8 +82,9 @@ export function generateSection(index: number, runSeed: number): WorldSection {
     }
     return { id: `${runSeed >>> 0}:${index}`, index, startX, endX,
         seed: sectionSeed(runSeed, index), sceneryXs, enemies, structures,
-        platforms,
-        landmarks: generateLandmarks(index, runSeed, sectionSeed(runSeed ^ 0x4c414e44, index)) };
+        platforms, gaps, layout: terrainLayoutKind(index),
+        landmarks: generateLandmarks(index, runSeed, sectionSeed(runSeed ^ 0x4c414e44, index))
+            .filter(item => safeGround(item.x)) };
 }
 
 export function sectionWindow(scrollX: number, width: number, viewports: number): { first: number; last: number } {

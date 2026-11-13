@@ -14,7 +14,8 @@ const code = ts.transpileModule(source, { compilerOptions: {
 vm.runInNewContext(code, { exports: moduleExports, require: () => ({
     WORLD: { sectionLength: 2560, terrainTileSize: 64 }
 }) });
-const { generatePlatforms, landingSurfaceY, standingSurfaceY } = moduleExports;
+const { generatePlatforms, landingSurfaceY, standingSurfaceY, generateTerrainGaps,
+    terrainLayoutKind, TERRAIN_LAYOUTS, groundExists, terrainSegmentImpact } = moduleExports;
 
 test('platforms are reproducible and keep main ground open', () => {
     for (let index = 0; index < 20; index++) {
@@ -22,7 +23,7 @@ test('platforms are reproducible and keep main ground open', () => {
         const two = generatePlatforms(index, 42, 0x1234567 + index);
         assert.deepEqual(JSON.parse(JSON.stringify(one)), JSON.parse(JSON.stringify(two)));
         for (const platform of one) {
-            assert.ok(platform.height <= 112);
+            assert.ok(platform.height <= 192);
             assert.ok(platform.width >= 192);
             assert.ok(platform.x - platform.width / 2 >= index * 2560);
             assert.ok(platform.x + platform.width / 2 < (index + 1) * 2560);
@@ -41,20 +42,60 @@ test('falling onto upper ledge lands, while rising through it does not', () => {
 });
 
 
-test('upper-route motifs vary but retain reachable pairs', () => {
-    const signatures = new Set();
-    for (let roll = 0; roll < 48; roll++) {
-        const ledges = generatePlatforms(2, 991, roll * 0x102031);
-        signatures.add(ledges.map(p => [p.x - 5120, p.width, p.height].join(':')).join('|'));
-        assert.equal(ledges.length, 4);
-        for (const [a, b] of [[ledges[0], ledges[1]], [ledges[2], ledges[3]]]) {
-            assert.ok(b.x > a.x && b.x - a.x <= 400, 'No precision long jump on paired route');
-            assert.ok(b.height >= a.height && b.height - a.height <= 48,
-                'A reachable second step, never a sudden large vertical climb');
+test('all twelve planned terrain archetypes generate reproducibly and remain navigable', () => {
+    assert.equal(TERRAIN_LAYOUTS.length, 12);
+    const visited = new Set();
+    for (let index = 0; index < 36; index++) {
+        const name = terrainLayoutKind(index);
+        visited.add(name);
+        const roll = Math.imul(index + 1, 0x102031) >>> 0;
+        const a = generatePlatforms(index, 991, roll);
+        const b = generatePlatforms(index, 991, roll);
+        assert.deepEqual(JSON.parse(JSON.stringify(a)), JSON.parse(JSON.stringify(b)));
+        assert.ok(a.length >= 4, 'Two saved legacy high-perch slots always exist');
+        assert.equal(new Set(a.map(platform => platform.id)).size, a.length);
+        for (const platform of a) {
+            assert.ok(platform.x - platform.width / 2 >= index * 2560,
+                'Platforms never spill across section boundaries');
+            assert.ok(platform.x + platform.width / 2 < (index + 1) * 2560);
+            assert.ok(platform.height > 0 && platform.height <= 192);
+        }
+        for (let i = 1; i < a.length; i++) {
+            assert.ok(a[i].x > a[i - 1].x, 'Stepping-stone order is left-to-right');
+            assert.ok(a[i].x - a[i - 1].x <= 850,
+                'Upper-route segments fit inside the section; longer spans have ground below');
+        }
+        const gaps = generateTerrainGaps(index, roll);
+        for (const gap of gaps) {
+            assert.ok(gap.end - gap.start <= 120, 'Pits are short enough to jump');
+            assert.ok(gap.start >= index * 2560 + 150);
+            assert.ok(gap.end <= (index + 1) * 2560 - 150);
         }
     }
-    assert.ok(signatures.size >= 6, 'Distinct terrain shapes rather than one repeated layout');
+    assert.equal(visited.size, 12);
+    assert.equal(terrainLayoutKind(0), 'flat-beginner', 'Start with safe introductory terrain');
 });
+
+test('broken bridges and alternating pits remove physical ground and block shots correctly', () => {
+    for (const index of [2, 7, 14, 19]) {
+        const gaps = generateTerrainGaps(index, 123);
+        assert.ok(gaps.length >= 2);
+        for (const gap of gaps) {
+            const centre = (gap.start + gap.end) / 2;
+            assert.equal(groundExists(centre, gaps), false);
+            assert.equal(groundExists(gap.start - 10, gaps), true);
+            assert.equal(landingSurfaceY([], 600, centre, 599, 630, gaps), undefined);
+            assert.equal(standingSurfaceY([], 600, centre, 600, gaps), undefined);
+            assert.equal(landingSurfaceY([], 600, gap.start - 10, 599, 630, gaps), 600);
+            assert.equal(terrainSegmentImpact([], 600, centre, 570, centre, 630, gaps),
+                undefined, 'Projectile can pass through pit opening');
+            const wall = terrainSegmentImpact([], 600,
+                gap.start - 12, 590, gap.start - 12, 630, gaps);
+            assert.ok(wall, 'Projectile hits surrounding ground');
+        }
+    }
+});
+
 
 test('landmarks are deterministic, varied and confined to their section', () => {
     const results = {};

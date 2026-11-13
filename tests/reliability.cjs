@@ -1733,7 +1733,7 @@ console.log('PASS startup fixes: unsmoothed engine time, raw-time speed diagnost
         g.xpSystem.dropGem(scroll + 900, g.player.y); g.xpSystem.update(0);
         const active = objects.filter(object => object.active).length;
         maxActive = Math.max(maxActive, active);
-        assert.ok(active < 230, `Live objects grew at section ${index}: ${active}`);
+        assert.ok(active < 320, `Live objects grew at section ${index}: ${active}`);
         assert.ok(g.xpSystem.gems.length <= 5);
     }
     assert.ok(g.enemySystem.records.size > 1000, 'Persistent records, not sprites, retain visited state');

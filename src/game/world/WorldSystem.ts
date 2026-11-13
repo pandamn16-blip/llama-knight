@@ -6,7 +6,7 @@ import { generateSection, sectionWindow } from './sections';
 import type { WorldSection } from './sections';
 import { landingSurfaceY, standingSurfaceY, terrainSegmentImpact, headCoveredByPlatform } from './terrain';
 import type { TerrainImpact } from './terrain';
-import type { TerrainPlatform } from './terrain';
+import type { TerrainPlatform, TerrainGap } from './terrain';
 import type { Landmark } from './landmarks';
 import { terrainTexture, ENVIRONMENT_ASSETS } from './environmentAssets';
 
@@ -58,8 +58,11 @@ export class WorldSystem {
         if (!['breadlands:platform-left', 'breadlands:platform-middle', 'breadlands:platform-right']
             .some(key => terrainTexture(this.scene, key))) {
             return [
-                this.scene.add.rectangle(platform.x, top + 12, platform.width, 24, 0x95734f).setDepth(3),
-                this.scene.add.rectangle(platform.x, top + 1.5, platform.width, 3, 0x86b35b).setDepth(4)
+                this.scene.add.rectangle(platform.x, top + 12, platform.width, 24,
+                    platform.material === 'bridge' ? 0x8b6850 :
+                        platform.material === 'ramp' ? 0x91876a : 0x95734f).setDepth(3),
+                this.scene.add.rectangle(platform.x, top + 1.5, platform.width, 3,
+                    platform.material === 'bridge' ? 0xc6a77a : 0x86b35b).setDepth(4)
             ];
         }
         // Narrow ledge body; full height is not solid, so players can jump through
@@ -152,25 +155,46 @@ export class WorldSystem {
         });
         objects.push(...scenery);
         const height = this.scene.scale.height;
-        const centre = (data.startX + data.endX) / 2;
-        objects.push(this.scene.add.rectangle(centre, this.groundY + (height - this.groundY) / 2,
-            WORLD.sectionLength, height - this.groundY, 0x65865b).setDepth(1));
         const tile = WORLD.terrainTileSize;
-        // Keep placeholder rendering lightweight: one strip per section, not 40
-        // separate rectangles. Actual authored tiles are only created when enabled.
-        if (!terrainTexture(this.scene, 'breadlands:ground-top')) {
-            objects.push(this.scene.add.rectangle(centre, this.groundY + 5,
-                WORLD.sectionLength, 10, 0x425b3c).setDepth(2));
-        } else {
-            for (let x = data.startX + tile / 2; x < data.endX; x += tile) {
-                objects.push(this.tile(x, this.groundY + tile / 2, tile, tile,
-                    'breadlands:ground-top', 0x52744a, 2));
-            }
+        // Physical holes remove both the ground-top strip and fill artwork.
+        // Draw the remaining horizontal solid ranges, separated by real pits.
+        const ranges: { start: number; end: number }[] = [];
+        let cursor = data.startX;
+        for (const gap of data.gaps) {
+            if (gap.start > cursor) ranges.push({ start: cursor, end: gap.start });
+            cursor = Math.max(cursor, gap.end);
         }
-        if (terrainTexture(this.scene, 'breadlands:ground-fill')) {
-            for (let x = data.startX + tile / 2; x < data.endX; x += tile)
-                for (let y = this.groundY + tile * 1.5; y < height + tile / 2; y += tile)
-                    objects.push(this.tile(x, y, tile, tile, 'breadlands:ground-fill', 0x65865b, 1));
+        if (cursor < data.endX) ranges.push({ start: cursor, end: data.endX });
+        for (const range of ranges) {
+            const width = range.end - range.start, centre = (range.start + range.end) / 2;
+            objects.push(this.scene.add.rectangle(centre,
+                this.groundY + (height - this.groundY) / 2,
+                width, height - this.groundY, 0x65865b).setDepth(1));
+            if (!terrainTexture(this.scene, 'breadlands:ground-top')) {
+                objects.push(this.scene.add.rectangle(centre, this.groundY + 5,
+                    width, 10, 0x425b3c).setDepth(2));
+            } else {
+                // Tile art may extend over the hole if simply placed by centre;
+                // clip boundary tiles to exact ranges with a small placeholder.
+                for (let x = range.start; x < range.end; x += tile) {
+                    const w = Math.min(tile, range.end - x);
+                    if (w < tile) objects.push(this.scene.add.rectangle(x + w / 2,
+                        this.groundY + 5, w, 10, 0x425b3c).setDepth(2));
+                    else objects.push(this.tile(x + tile / 2, this.groundY + tile / 2,
+                        tile, tile, 'breadlands:ground-top', 0x52744a, 2));
+                }
+            }
+            if (terrainTexture(this.scene, 'breadlands:ground-fill')) {
+                for (let x = range.start; x < range.end; x += tile) {
+                    const w = Math.min(tile, range.end - x);
+                    for (let y = this.groundY + tile * 1.5; y < height + tile / 2; y += tile) {
+                        if (w < tile) objects.push(this.scene.add.rectangle(x + w / 2,
+                            y, w, tile, 0x65865b).setDepth(1));
+                        else objects.push(this.tile(x + tile / 2, y, tile, tile,
+                            'breadlands:ground-fill', 0x65865b, 1));
+                    }
+                }
+            }
         }
         for (const platform of data.platforms) objects.push(...this.drawPlatform(platform));
         for (const landmark of data.landmarks) objects.push(...this.drawLandmark(landmark));
@@ -191,19 +215,32 @@ export class WorldSystem {
     // Terrain determines whether a fireball/strike reaches its target first.
     terrainImpact(x0: number, y0: number, x1: number, y1: number): TerrainImpact | undefined {
         return terrainSegmentImpact(this.platformsNear((x0 + x1) / 2),
-            this.groundY, x0, y0, x1, y1);
+            this.groundY, x0, y0, x1, y1, this.gapsNear((x0 + x1) / 2));
     }
 
     enemyHeadExposed(x: number, enemyBodyY: number): boolean {
         return !headCoveredByPlatform(this.platformsNear(x), this.groundY, x, enemyBodyY);
     }
 
+    private gapsNear(x: number): TerrainGap[] {
+        const index = Math.floor(x / WORLD.sectionLength);
+        const result: TerrainGap[] = [];
+        for (const i of [index - 1, index, index + 1]) {
+            if (i < 0) continue;
+            const data = this.sections.get(i)?.data ?? generateSection(i, this.seed);
+            result.push(...data.gaps);
+        }
+        return result;
+    }
+
     landingY(x: number, previousFoot: number, nextFoot: number): number | undefined {
-        return landingSurfaceY(this.platformsNear(x), this.groundY, x, previousFoot, nextFoot);
+        return landingSurfaceY(this.platformsNear(x), this.groundY, x, previousFoot, nextFoot,
+            this.gapsNear(x));
     }
 
     standingY(x: number, currentFoot: number): number | undefined {
-        return standingSurfaceY(this.platformsNear(x), this.groundY, x, currentFoot);
+        return standingSurfaceY(this.platformsNear(x), this.groundY, x, currentFoot,
+            this.gapsNear(x));
     }
 
     update(): void {
