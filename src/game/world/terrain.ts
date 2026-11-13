@@ -2,26 +2,41 @@ import { WORLD } from '../config/world';
 
 export interface TerrainPlatform {
     id: string;
-    x: number; // centre in world coordinates
+    x: number;
     width: number;
-    height: number; // top surface above the continuous main ground
+    height: number; // Top surface above the continuous ground.
 }
 
-// A small, entirely optional selection of reachable ledges. Every section retains
-// a continuous ground route; these layouts do not require precision platforming.
+// Composed motifs, not a repeating four-platform stamp. Every motif has two
+// short, reachable routes, with optional stepping stones between them.
+// No pits or mandatory jumps. Collision is independent of any artwork.
+const MOTIFS = [
+    [440, 744, 1472, 1776],
+    [608, 896, 1568, 1888],
+    [400, 720, 1344, 1648],
+    [544, 864, 1584, 1904],
+    [480, 800, 1424, 1728],
+    [672, 976, 1536, 1840]
+] as const;
+
 export function generatePlatforms(index: number, seed: number, roll: number): TerrainPlatform[] {
     const start = index * WORLD.sectionLength;
-    const layout = roll % 3;
-    // Two short, connected upper routes per section. A running jump reaches
-    // the next ledge; the ground underneath remains entirely continuous.
-    const routes = layout === 0 ? [520, 824, 1500, 1804] :
-        layout === 1 ? [640, 944, 1620, 1924] : [440, 744, 1432, 1736];
-    return routes.map((offset, i) => ({
-        id: `${seed >>> 0}:${index}:platform:${i}`,
-        x: start + offset,
-        width: 4 * WORLD.terrainTileSize,
-        height: i % 2 === 0 ? 64 : 112
-    }));
+    const motif = MOTIFS[roll % MOTIFS.length];
+    const variance = (roll >>> 8) & 0x7;
+    const shift = (variance - 3) * 16;
+    const widths = [256, 256, 256, 256];
+    return motif.map((offset, i) => {
+        // More variety in silhouette and timing, while avoiding precision jumps.
+        const smallVariation = ((roll >>> (12 + i * 3)) & 0x3) * 16;
+        const width = widths[i] + (((roll >>> (i * 2 + 3)) & 1) ? 64 : 0);
+        const height = i % 2 === 0 ? 64 + (smallVariation > 16 ? 16 : 0)
+            : 96 + (smallVariation > 16 ? 16 : 0);
+        return {
+            id: `${seed >>> 0}:${index}:platform:${i}`,
+            x: start + offset + shift + (i % 2 === 0 ? 0 : smallVariation - 16),
+            width, height
+        };
+    });
 }
 
 export function platformTop(groundY: number, platform: TerrainPlatform): number {
@@ -29,7 +44,6 @@ export function platformTop(groundY: number, platform: TerrainPlatform): number 
 }
 
 function covers(platform: TerrainPlatform, playerX: number): boolean {
-    // Slight inset keeps standing on an edge intentional rather than jittery.
     return Math.abs(playerX - platform.x) <= platform.width / 2 - 4;
 }
 
