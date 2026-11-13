@@ -40,7 +40,10 @@ export class Player {
     showDeath(): void { this.visual.showAction('death'); }
     setVisualPhase(phase: RunPhase): void { this.visual.setPhase(phase); }
 
-    update(actions: Pick<PlayerActions, 'left' | 'right' | 'jump'>, dt: number, resolveHorizontal?: (from: number, to: number, y: number) => number): void {
+    update(actions: Pick<PlayerActions, 'left' | 'right' | 'jump'>, dt: number,
+        resolveHorizontal?: (from: number, to: number, y: number) => number,
+        terrain?: { landingY(x: number, previousFoot: number, nextFoot: number): number | undefined;
+            standingY(x: number, foot: number): number | undefined }): void {
         const previousX = this.sprite.x;
         // Opposing/no inputs preserve the last direction, including while airborne.
         if (actions.left !== actions.right) {
@@ -51,12 +54,31 @@ export class Player {
         if (actions.left) this.sprite.x -= speed * dt;
         if (actions.right) this.sprite.x += speed * dt;
         this.sprite.x = Math.max(BALANCE.player.minX, this.sprite.x);
-        if (actions.jump && this.run.onGround && !this.isShielding) { this.run.velocityY = BALANCE.player.jumpVelocity; this.run.onGround = false; }
-        if (!this.run.onGround) { this.run.velocityY += BALANCE.player.gravity * dt; this.sprite.y += this.run.velocityY * dt; }
-        if (this.sprite.y >= this.groundY - BALANCE.player.groundOffset) {
-            this.sprite.y = this.groundY - BALANCE.player.groundOffset; this.run.velocityY = 0; this.run.onGround = true;
-        }
+        // Resolve horizontal contact before testing platform overlap.
         if (resolveHorizontal) this.sprite.x = resolveHorizontal(previousX, this.sprite.x, this.sprite.y);
+        const footOffset = BALANCE.player.groundOffset;
+        const previousFoot = this.sprite.y + footOffset;
+        if (this.run.onGround && terrain && terrain.standingY(this.sprite.x, previousFoot) === undefined) {
+            // Walked off an optional raised ledge.
+            this.run.onGround = false;
+            this.run.velocityY = 0;
+        }
+        if (actions.jump && this.run.onGround && !this.isShielding) {
+            this.run.velocityY = BALANCE.player.jumpVelocity;
+            this.run.onGround = false;
+        }
+        if (!this.run.onGround) {
+            this.run.velocityY += BALANCE.player.gravity * dt;
+            const nextFoot = previousFoot + this.run.velocityY * dt;
+            const landing = this.run.velocityY >= 0 ?
+                (terrain ? terrain.landingY(this.sprite.x, previousFoot, nextFoot) :
+                    previousFoot <= this.groundY + 1 && nextFoot >= this.groundY ? this.groundY : undefined) : undefined;
+            if (landing !== undefined) {
+                this.sprite.y = landing - footOffset;
+                this.run.velocityY = 0;
+                this.run.onGround = true;
+            } else this.sprite.y = nextFoot - footOffset;
+        }
         this.visual.setDefending(this.isShielding);
         this.visual.update(this.run, this.sprite.x !== previousX);
     }
