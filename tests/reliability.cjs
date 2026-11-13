@@ -2459,6 +2459,7 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     // The 68px separation should prevent the rendered Pyromancer and
     // character from visibly overlapping, even if a frame starts inside it.
     assert.equal(ARCHER.contactWidth, 68);
+    assert.equal(ARCHER.contactRange, 85, 'Bonk can reach beyond the solid collision boundary');
     assert.equal(second.resolvePlayerMovement(body.sprite.x - 60, body.sprite.x - 45,
         body.sprite.y), body.sprite.x - 60,
         'Player already inside left contact radius cannot walk further in');
@@ -2536,7 +2537,8 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     assert.ok(pyro.PYROMANCER_ATTACK.scale > pyro.PYROMANCER_IDLE.scale,
         'Attack art compensates for smaller figure drawn inside the frame');
     assert.equal(pyro.PYROMANCER_FIREBALL.impactFrame, 5, 'Final frame is impact-only');
-    assert.equal(pyro.PYROMANCER_BONK.scale, pyro.PYROMANCER_IDLE.scale);
+    assert.ok(pyro.PYROMANCER_BONK.scale > pyro.PYROMANCER_IDLE.scale,
+        'Bonk animation compensates for smaller illustrated pancake');
     assert.equal(pyro.PYROMANCER_DEATH.scale, pyro.PYROMANCER_IDLE.scale);
     console.log('PASS Pyromancer combat: original attack/bonk/death/fireball sheets and animation contracts.');
 }
@@ -2618,10 +2620,12 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     g.cameras.main.setScroll(14000, 0); archers.prepare();
     g.cameras.main.setScroll(perch.x - 700, 0); archers.prepare();
     const bonker = archers.archers[0];
-    g.player.x = bonker.sprite.x - 38; g.player.y = bonker.sprite.y;
+    g.player.x = bonker.sprite.x - 78; g.player.y = bonker.sprite.y;
     bonker.state = 'watch';
     archers.update(0.01);
     assert.equal(bonker.art.played, pyro.PYROMANCER_BONK.animationKey, 'Close attack plays bonk');
+    assert.equal(bonker.art.scaleX, pyro.PYROMANCER_BONK.scale,
+        'Bonk pose matches the corrected character size');
     const shotsBefore = archers.arrows.length;
     archers.update(ARCHER.contactWindup + 0.01);
     assert.equal(archers.arrows.length, shotsBefore, 'Bonk never launches a projectile');
