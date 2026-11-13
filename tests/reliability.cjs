@@ -1746,8 +1746,9 @@ console.log('PASS startup fixes: unsmoothed engine time, raw-time speed diagnost
 // The real scene walks beyond the previous endpoint with continuous speed/framing/progress.
 for (const characterId of ['llamaCrunch', 'candy']) {
     const { game: g } = explorationFixture(characterId);
-    // Isolate world extension/camera from combat obstacles.
+    // Isolate world extension/camera from combat obstacles and destructible walls.
     g.enemySystem.resolvePlayerMovement = (_from, to) => to;
+    g.world.resolvePlayerMovement = (_from, to) => to;
     g.player.sprite.x = 15500;
     for (let i = 0; i < 180; i++) g.worldCamera.update(g.player.x, 1 / 60);
     g.playerInput.keys.D.isDown = true;
