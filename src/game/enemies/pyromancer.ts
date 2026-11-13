@@ -32,7 +32,9 @@ export const PYROMANCER_ATTACK = {
 } as const;
 export const PYROMANCER_BONK = {
     ...character, key: 'pyromancer:bonk', animationKey: 'pyromancer:bonk',
-    path: 'enemies/pyromancer-pancake/bonk.png', fps: 11, repeat: 0
+    path: 'enemies/pyromancer-pancake/bonk.png', fps: 11, repeat: 0,
+    // Bonk poses were authored with a smaller character footprint than idle.
+    scale: 0.74
 } as const;
 export const PYROMANCER_DEATH = {
     ...character, key: 'pyromancer:death', animationKey: 'pyromancer:death',
