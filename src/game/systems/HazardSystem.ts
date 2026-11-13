@@ -12,7 +12,6 @@ type Hazard = {
     placement: HazardPlacement;
     pieces: Phaser.GameObjects.Rectangle[];
     trapHits: number;
-    enemyCaptive?: { id: string; releaseAt: number };
 };
 const cooldown = BALANCE.player.damageCooldown / 1000;
 
@@ -149,6 +148,10 @@ export class HazardSystem {
             } else if (this.timedActive(hazard) && playerNear) {
                 this.hurtPlayer(1);
             }
+            // The player owns this trap until they escape; an enemy cannot
+            // destroy it from underneath a captured player.
+            if (hazard.placement.kind === 'snap-trap' &&
+                this.playerTrap === hazard.placement.id) continue;
             // Enemies are affected by the same traps/spikes. A captured enemy
             // is held briefly then automatically struggles free; no infinite AI lock.
             if (!this.timedActive(hazard)) continue;
