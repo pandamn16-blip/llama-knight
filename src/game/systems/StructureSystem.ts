@@ -64,7 +64,7 @@ export class StructureSystem {
                     live.has(placement.id)) continue;
                 if (placement.kind === 'chest') {
                     if (!this.activeChests.has(placement.id)) {
-                        const chest = { placement, sprite: this.scene.add.container(placement.x, this.groundY - 24)
+                        const chest = { placement, sprite: this.scene.add.container(placement.x, this.groundY - (placement.elevation ?? 0) - 24)
                             .setDepth(5).setScrollFactor(1) };
                         this.drawChest(chest); this.activeChests.set(placement.id, chest);
                     }

@@ -1,6 +1,7 @@
 import { loadBreadAnimations, registerBreadAnimations } from '../enemies/bread';
 import { loadShieldSheets, registerShieldAnimations } from '../characters/shield';
 import { Scene } from 'phaser';
+import { loadEnvironmentArt } from '../world/environmentAssets';
 import { loadWeaponEffects, registerWeaponEffects } from '../weapons/slashEffect';
 import { loadCharacterSheets, registerCharacterAnimations } from '../characters/spriteAnimations';
 
@@ -41,6 +42,7 @@ export class Preloader extends Scene
         loadWeaponEffects(this);
         loadBreadAnimations(this);
         loadShieldSheets(this);
+        loadEnvironmentArt(this);
     }
 
     create ()

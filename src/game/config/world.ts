@@ -2,6 +2,7 @@
 // independent of character stats, collision thresholds and combat balance.
 export const WORLD = {
     sectionLength: 2560,
+    terrainTileSize: 64,
     preparationViewports: 1,
     cleanupViewports: 3,
     pixelsPerMetre: 32,

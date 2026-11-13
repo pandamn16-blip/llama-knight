@@ -17,6 +17,8 @@ import type { RunPhase } from '../state/RunState';
 import { Player } from '../entities/Player';
 import { PlayerInput } from '../input/PlayerInput';
 import { EnemySystem } from '../systems/EnemySystem';
+import { ArcherSystem } from '../systems/ArcherSystem';
+import { PlatformRewardSystem } from '../systems/PlatformRewardSystem';
 import { CombatSystem } from '../systems/CombatSystem';
 import { isCharacterId, CHARACTERS } from '../characters/definitions';
 import type { CharacterId } from '../characters/definitions';
@@ -36,6 +38,8 @@ export class Game extends Phaser.Scene {
     private debug?: WorldDebug;
     private world!: WorldSystem;
     private enemySystem!: EnemySystem;
+    private archerSystem!: ArcherSystem;
+    private platformRewards!: PlatformRewardSystem;
     private combatSystem!: CombatSystem;
     private rewardNotice!: RewardNotice;
     private structures!: StructureSystem;
@@ -83,14 +87,22 @@ export class Game extends Phaser.Scene {
         this.xpSystem = new XpSystem(this, this.run, this.player,
             () => this.openLevelUp(), () => this.updateHud());
         this.healthPickups = new HealthPickupSystem(this, this.run, this.player, () => this.updateHud());
+        this.platformRewards = new PlatformRewardSystem(this, this.run, this.player, this.groundY,
+            value => this.xpSystem.award(value));
+        this.platformRewards.prepare();
         this.rewardNotice = new RewardNotice(this);
         this.structures = new StructureSystem(this, this.run, this.groundY, (placement, x, y) => {
             this.xpSystem.dropGem(x, y, STRUCTURES.crate.xp);
             if (placement.healthDrop) this.healthPickups.drop(`${placement.id}:health`, x, y);
         }, this.player, reward => this.claimChestReward(reward));
         this.structures.prepare();
+        this.archerSystem = new ArcherSystem(this, this.run, this.groundY, this.player,
+            x => this.combatSystem.resolveArcherArrow(x),
+            (x, y) => { this.run.kills++; this.xpSystem.dropGem(x, y); this.updateHud(); });
+        this.archerSystem.prepare();
         this.combatSystem = new CombatSystem(this, this.run, this.player, this.enemySystem,
-            (x, y) => this.xpSystem.dropGem(x, y), () => this.endGame(), () => this.updateHud(), () => this.rosie.speak('damage'), this.structures);
+            (x, y) => this.xpSystem.dropGem(x, y), () => this.endGame(), () => this.updateHud(),
+            () => this.rosie.speak('damage'), this.structures, this.archerSystem);
 
         this.hud = new Hud(this);
         if (import.meta.env.DEV && WORLD.debugOverlay) {
@@ -248,21 +260,25 @@ export class Game extends Phaser.Scene {
             if (this.run.phase !== 'playing') break;
             this.run.runTime += dt;
             simulatedMs += dt * 1000;
-            this.player.update(actions, dt, (from, to, y) => this.enemySystem.resolvePlayerMovement(from, to, y));
+            this.player.update(actions, dt,
+                (from, to, y) => this.enemySystem.resolvePlayerMovement(from, to, y), this.world);
             this.run.furthestX = Math.max(this.run.furthestX, this.player.x);
             this.run.distance = Math.max(0, this.run.furthestX - this.run.startX) / WORLD.pixelsPerMetre;
             this.worldCamera.update(this.player.x, dt);
             this.world.update();
             this.enemySystem.prepare();
+            this.archerSystem?.prepare();
             this.structures.prepare();
             if (actions.attack) this.combatSystem.attack();
             this.combatSystem.update(dt);
             this.enemySystem.update(dt, (enemy) => this.combatSystem.resolveEnemyAttack(enemy));
+            this.archerSystem?.update(dt);
             if (this.run.phase !== 'playing') break;
             this.healthPickups.update();
             this.structures.update(step === 0 && interact);
             if (this.run.phase !== 'playing') break;
             this.xpSystem.update(dt);
+            this.platformRewards?.update();
         }
         this.debug?.update(this.player, this.cameras.main, this.enemySystem.enemies, delta, simulatedMs, this.run.moveSpeed);
         this.updateHud();

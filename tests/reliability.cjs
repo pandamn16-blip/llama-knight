@@ -1797,6 +1797,9 @@ console.log('PASS endless foundation: seeded sections, unbounded forward movemen
     const collectedId = g.xpSystem.gems.at(-1).id;
     g.player.x = 1800; g.xpSystem.update(0); assert.equal(g.run.xp, 1);
     const descriptions = new Map();
+    // Track section-owned objects by identity: terrain now includes multiple
+    // landmark shape families, not just the original three rectangle colours.
+    const sectionObjectsSeen = new Set();
     let maxActive = 0;
     const check = scroll => {
         g.cameras.main.setScroll(scroll, 0); g.player.x = scroll + 400;
@@ -1812,11 +1815,13 @@ console.log('PASS endless foundation: seeded sections, unbounded forward movemen
             assert.equal(JSON.stringify(section.data), descriptions.get(index));
             terrain.push(...section.objects);
         }
-        const terrainKeys = terrain.map(object => `${object.args[2]}:${object.x}:${object.y}`);
-        assert.equal(new Set(terrainKeys).size, terrain.length);
-        const terrainColours = [0x8195a7, 0x65865b, 0x425b3c];
-        const activeTerrain = objects.filter(object => object.active && object.kind === 'rectangle' && terrainColours.includes(object.args[2]));
-        assert.equal(activeTerrain.length, terrain.length, 'No live orphan terrain after unload/reload');
+        for (const object of terrain) {
+            assert.equal(object.active, true, 'Loaded section objects are active');
+            sectionObjectsSeen.add(object);
+        }
+        const liveWorld = [...sectionObjectsSeen].filter(object => object.active);
+        assert.equal(liveWorld.length, terrain.length, 'No live orphan terrain after unload/reload');
+        assert.ok(liveWorld.every(object => terrain.includes(object)));
         const enemies = g.enemySystem.enemies;
         assert.equal(new Set(enemies.map(enemy => enemy.placementId)).size, enemies.length);
         assert.ok(!enemies.some(enemy => enemy.placementId === deadId));
@@ -1840,7 +1845,7 @@ console.log('PASS endless foundation: seeded sections, unbounded forward movemen
     assert.equal(JSON.stringify([...g.enemySystem.records].sort()), savedEnemyState);
     for (let scroll = 0; scroll <= end; scroll += 160) check(scroll);
     assert.equal(JSON.stringify([...g.enemySystem.records].sort()), savedEnemyState);
-    assert.ok(maxActive < 200);
+    assert.ok(maxActive < 300, `Section streaming should remain bounded with landmarks: ${maxActive}`);
     g.events.emit('shutdown');
     assert.equal(g.world.sections.size, 0); assert.equal(g.enemySystem.records.size, 0);
     assert.equal(g.xpSystem.gems.length, 0); assert.equal(g.xpSystem.dormant.size, 0);
@@ -2366,3 +2371,63 @@ console.log('PASS Bread body collision: both characters, both directions, swept 
     g.events.emit('shutdown');
 }
 console.log('PASS stationary shield: no horizontal movement or jumping, immediate release, airborne gravity and unchanged Candy controls.');
+
+
+// Elevated rewards are deterministic, collected once, and remain claimed after streaming.
+{
+    const { game: g } = fixture();
+    const { PlatformRewardSystem } = load('systems/PlatformRewardSystem');
+    const rewards = new PlatformRewardSystem(g, g.run, g.player, g.groundY, xp => g.xpSystem.award(xp));
+    const platforms = generateSection(0, g.run.seed).platforms;
+    assert.equal(platforms.length, 4);
+    assert.ok(platforms[1].x - platforms[0].x < 350, 'Paired ledges make a connected upper route');
+    g.cameras.main.setScroll(700, 0);
+    rewards.prepare();
+    const prize = [...rewards.active.values()].find(entry => entry.sprite.x === platforms[2].x);
+    assert.ok(prize, 'An upper route has an XP reward');
+    g.player.x = prize.sprite.x; g.player.y = prize.sprite.y;
+    rewards.update();
+    assert.equal(g.run.xp, 1);
+    g.cameras.main.setScroll(10000, 0); rewards.prepare();
+    g.cameras.main.setScroll(700, 0); rewards.prepare();
+    assert.ok(![...rewards.active.values()].some(entry => entry.sprite.x === platforms[2].x));
+    assert.equal(g.run.xp, 1);
+    const chest = generateSection(1, g.run.seed).structures.find(item => item.kind === 'chest' && item.elevation);
+    assert.ok(chest && chest.elevation === generateSection(1, g.run.seed).platforms[1].height);
+    rewards.destroy(); g.events.emit('shutdown');
+    console.log('PASS elevated rewards: repeatable ledges, collectible XP and persistent once-per-run prizes.');
+}
+
+// Bread Archers aim before firing, shoot in the correct direction and remain
+// defeated even when the camera streams the section out and back.
+{
+    const { game: g } = fixture();
+    const { ArcherSystem } = load('systems/ArcherSystem');
+    const hits = [], kills = [];
+    const archers = new ArcherSystem(g, g.run, g.groundY, g.player,
+        direction => hits.push(direction), (x, y) => kills.push([x, y]));
+    const perch = generateSection(1, g.run.seed).platforms[3];
+    g.cameras.main.setScroll(perch.x - 700, 0);
+    g.player.x = perch.x - 165;
+    g.player.y = g.groundY - perch.height - 32;
+    archers.prepare();
+    assert.equal(archers.archers.length, 1);
+    const archer = archers.archers[0];
+    archers.update(0.02);
+    assert.equal(archer.state, 'aim');
+    assert.equal(archer.warning.visible, true);
+    archers.update(0.75);
+    assert.equal(archer.state, 'reload');
+    assert.equal(archer.warning.visible, false);
+    for (let step = 0; step < 8; step++) archers.update(0.1);
+    assert.equal(hits.length, 1);
+    assert.equal(hits[0], 1, 'Shot approaches player from their right');
+    assert.equal(archers.damage(archer, 2), false);
+    assert.equal(archers.damage(archer, 2), true);
+    assert.equal(kills.length, 1);
+    g.cameras.main.setScroll(14000, 0); archers.prepare();
+    g.cameras.main.setScroll(perch.x - 700, 0); archers.prepare();
+    assert.equal(archers.archers.length, 0, 'Dead archer does not respawn on return');
+    archers.destroy(); g.events.emit('shutdown');
+    console.log('PASS Bread Archers: spawn, aiming tell, projectile, combat damage and persistent death.');
+}
