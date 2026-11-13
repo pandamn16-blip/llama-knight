@@ -15,7 +15,7 @@ export const PYROMANCER_IDLE = {
     repeat: -1,
     originX: FOOT_ORIGIN.x,
     originY: FOOT_ORIGIN.y,
-    scale: 0.38
+    scale: 0.5
 } as const;
 
 export function loadPyromancerIdle(scene: Scene): void {
