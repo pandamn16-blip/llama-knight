@@ -2431,3 +2431,25 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     archers.destroy(); g.events.emit('shutdown');
     console.log('PASS Bread Archers: spawn, aiming tell, projectile, combat damage and persistent death.');
 }
+
+
+// Pancake archer idle: asset is six transparent 256px frames, grounded at
+// the shared y=224 sprite anchor; loader and animation metadata agree.
+{
+    const { PYROMANCER_IDLE, loadPyromancerIdle } = load('enemies/pyromancer');
+    const png = fs.readFileSync(path.join(__dirname, '../public/assets', PYROMANCER_IDLE.path));
+    assert.equal(png.subarray(1, 4).toString('ascii'), 'PNG');
+    assert.equal(png.readUInt32BE(16), 1536);
+    assert.equal(png.readUInt32BE(20), 256);
+    assert.equal(png[25], 6, 'Original RGBA PNG has transparency');
+    assert.equal(PYROMANCER_IDLE.start, 0);
+    assert.equal(PYROMANCER_IDLE.end, 5);
+    assert.equal(PYROMANCER_IDLE.originY, 224 / 256);
+    const requests = [];
+    loadPyromancerIdle({ load: { spritesheet: (...params) => requests.push(params) } });
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0][0], PYROMANCER_IDLE.key);
+    assert.equal(requests[0][1], PYROMANCER_IDLE.path);
+    assert.equal(requests[0][2].endFrame, 5);
+    console.log('PASS pancake archer idle: original six-frame RGBA image and loader contract.');
+}
