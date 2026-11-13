@@ -6,15 +6,15 @@ const ts = require('typescript');
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 
-const exports = {};
+const moduleExports = {};
 const source = fs.readFileSync(path.join(__dirname, '../src/game/world/terrain.ts'), 'utf8');
 const code = ts.transpileModule(source, { compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020
 } }).outputText;
-vm.runInNewContext(code, { exports, require: () => ({
+vm.runInNewContext(code, { exports: moduleExports, require: () => ({
     WORLD: { sectionLength: 2560, terrainTileSize: 64 }
 }) });
-const { generatePlatforms, landingSurfaceY, standingSurfaceY } = exports;
+const { generatePlatforms, landingSurfaceY, standingSurfaceY } = moduleExports;
 
 test('platforms are reproducible and keep main ground open', () => {
     for (let index = 0; index < 20; index++) {
