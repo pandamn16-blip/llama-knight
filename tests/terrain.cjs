@@ -148,3 +148,37 @@ test('hidden Bread heads beneath ledges are not exposed', () => {
     assert.equal(headCoveredByPlatform(ledge, 600, 200, 568), false,
         'An enemy away from the platform is exposed');
 });
+
+
+test('hazards spawn deterministically, away from gaps, platform roofs and rewards', () => {
+    const hazardExports = {};
+    const source = fs.readFileSync(path.join(__dirname, '../src/game/world/hazards.ts'), 'utf8');
+    const code = ts.transpileModule(source, { compilerOptions: {
+        module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020
+    } }).outputText;
+    vm.runInNewContext(code, { exports: hazardExports, require: () => ({
+        WORLD: { sectionLength: 2560 }
+    }) });
+    const { generateHazards } = hazardExports;
+    assert.equal(generateHazards(0, 11, 9, [], [], []).length, 0,
+        'Tutorial opening is hazard-free');
+    for (let index = 1; index < 36; index++) {
+        const gaps = moduleExports.generateTerrainGaps(index, 17);
+        const platforms = moduleExports.generatePlatforms(index, 11, 20);
+        const occupied = [index * 2560 + 1760];
+        const a = generateHazards(index, 11, 50 + index, gaps, platforms, occupied);
+        const b = generateHazards(index, 11, 50 + index, gaps, platforms, occupied);
+        assert.deepEqual(JSON.parse(JSON.stringify(a)), JSON.parse(JSON.stringify(b)));
+        assert.ok(a.length <= 2);
+        assert.equal(new Set(a.map(h => h.id)).size, a.length);
+        for (const item of a) {
+            assert.ok(item.x > index * 2560 && item.x < (index + 1) * 2560);
+            assert.ok(gaps.every(g => item.x < g.start - 90 || item.x > g.end + 90));
+            assert.ok(platforms.every(p => Math.abs(item.x - p.x) >= p.width / 2 + 28));
+            assert.ok(occupied.every(x => Math.abs(item.x - x) >= 130));
+        }
+    }
+    assert.ok(generateHazards(1, 11, 1, [], [], []).every(h => h.kind === 'fixed-spikes'));
+    assert.ok(generateHazards(2, 11, 1, [], [], []).every(h => h.kind === 'timed-spikes'));
+    assert.ok(generateHazards(3, 11, 1, [], [], []).every(h => h.kind === 'snap-trap'));
+});
