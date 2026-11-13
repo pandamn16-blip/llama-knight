@@ -248,7 +248,8 @@ export class Game extends Phaser.Scene {
             if (this.run.phase !== 'playing') break;
             this.run.runTime += dt;
             simulatedMs += dt * 1000;
-            this.player.update(actions, dt, (from, to, y) => this.enemySystem.resolvePlayerMovement(from, to, y));
+            this.player.update(actions, dt,
+                (from, to, y) => this.enemySystem.resolvePlayerMovement(from, to, y), this.world);
             this.run.furthestX = Math.max(this.run.furthestX, this.player.x);
             this.run.distance = Math.max(0, this.run.furthestX - this.run.startX) / WORLD.pixelsPerMetre;
             this.worldCamera.update(this.player.x, dt);
