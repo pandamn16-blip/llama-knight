@@ -2423,7 +2423,9 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     assert.equal(hits.length, 1);
     assert.equal(hits[0], 1, 'Shot approaches player from their right');
     assert.equal(archers.damage(archer, 2), false);
+    assert.equal(archer.sprite.alpha, 0.5, 'Nonlethal hit fades Pyromancer like Bread');
     assert.equal(archers.damage(archer, 2), true);
+    assert.equal(archer.sprite.alpha, 1, 'Lethal hit restores opacity for death animation');
     assert.equal(kills.length, 1);
     g.cameras.main.setScroll(14000, 0); archers.prepare();
     g.cameras.main.setScroll(perch.x - 700, 0); archers.prepare();
@@ -2649,4 +2651,29 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     sys.destroy();
     g.events.emit('shutdown');
     console.log('PASS Pyromancer doubled range: 900px detection and 1400px projectile, distant casting.');
+}
+
+// Pyromancer damage flash restores opacity, refreshes on repeated hits,
+// and cancels its timer when a sprite is destroyed.
+{
+    const { game: g, advance } = fixture();
+    const { ArcherSystem } = load('systems/ArcherSystem');
+    const { BALANCE } = load('config/balance');
+    const sys = new ArcherSystem(g, g.run, g.groundY, g.player, () => {}, () => {});
+    const perch = generateSection(1, g.run.seed).platforms[3];
+    g.cameras.main.setScroll(perch.x - 700, 0);
+    sys.prepare();
+    const pyro = sys.archers[0];
+    assert.ok(pyro);
+    assert.equal(sys.damage(pyro, 1), false);
+    assert.equal(pyro.sprite.alpha, 0.5);
+    advance(BALANCE.effects.enemyHitDuration - 10);
+    assert.equal(pyro.sprite.alpha, 0.5);
+    assert.equal(sys.damage(pyro, 1), false, 'Second hit restarts flash');
+    advance(10);
+    assert.equal(pyro.sprite.alpha, 0.5, 'Old timer cannot end a new flash');
+    advance(BALANCE.effects.enemyHitDuration - 10);
+    assert.equal(pyro.sprite.alpha, 1, 'Flash restores full opacity');
+    sys.destroy(); g.events.emit('shutdown');
+    console.log('PASS Pyromancer non-lethal damage fade, refresh and cleanup.');
 }
