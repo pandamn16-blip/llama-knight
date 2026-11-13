@@ -422,8 +422,10 @@ export class WorldSystem {
                 const alpha = platform?.feature === 'crumble' && state?.triggerAt !== undefined ?
                     0.45 : wall ? Math.max(0.35, (state?.hp ?? wall.hp) / wall.hp) : 1;
                 for (const piece of pieces) {
-                    piece.setVisible(visible);
-                    if ('setAlpha' in piece) piece.setAlpha(alpha);
+                    if ('setVisible' in piece && typeof piece.setVisible === 'function')
+                        piece.setVisible(visible);
+                    if ('setAlpha' in piece && typeof piece.setAlpha === 'function')
+                        piece.setAlpha(alpha);
                 }
             }
             for (const block of section.scenery) {
