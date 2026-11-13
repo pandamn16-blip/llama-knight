@@ -267,18 +267,18 @@ export class Game extends Phaser.Scene {
             this.worldCamera.update(this.player.x, dt);
             this.world.update();
             this.enemySystem.prepare();
-            this.archerSystem.prepare();
+            this.archerSystem?.prepare();
             this.structures.prepare();
             if (actions.attack) this.combatSystem.attack();
             this.combatSystem.update(dt);
             this.enemySystem.update(dt, (enemy) => this.combatSystem.resolveEnemyAttack(enemy));
-            this.archerSystem.update(dt);
+            this.archerSystem?.update(dt);
             if (this.run.phase !== 'playing') break;
             this.healthPickups.update();
             this.structures.update(step === 0 && interact);
             if (this.run.phase !== 'playing') break;
             this.xpSystem.update(dt);
-            this.platformRewards.update();
+            this.platformRewards?.update();
         }
         this.debug?.update(this.player, this.cameras.main, this.enemySystem.enemies, delta, simulatedMs, this.run.moveSpeed);
         this.updateHud();
