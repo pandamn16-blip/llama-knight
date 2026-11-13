@@ -2435,7 +2435,7 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     // persists position when streamed out, and physically blocks an approaching player.
     const second = new ArcherSystem(g, g.run, g.groundY, g.player, direction => hits.push(direction), () => {});
     g.cameras.main.setScroll(perch.x - 700, 0);
-    g.player.x = perch.x - 650; g.player.y = g.groundY - perch.height - ARCHER.footOffset;
+    g.player.x = perch.x - 1100; g.player.y = g.groundY - perch.height - ARCHER.footOffset;
     second.prepare();
     const patrol = second.archers[0];
     assert.ok(patrol, 'A living archer spawns on the platform');
