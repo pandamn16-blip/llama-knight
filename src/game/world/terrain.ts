@@ -94,7 +94,7 @@ export function terrainLayoutKind(index: number): TerrainLayoutKind {
     return TERRAIN_LAYOUTS[((index % TERRAIN_LAYOUTS.length) + TERRAIN_LAYOUTS.length) %
         TERRAIN_LAYOUTS.length];
 }
-export function generateTerrainGaps(index: number, roll: number): TerrainGap[] {
+export function generateTerrainGaps(index: number, _roll: number): TerrainGap[] {
     const source = PLANS[terrainLayoutKind(index)].gaps ?? [];
     // Keep pit geometry stable across generation, collisions and rendering.
     return source.map(([start, end]) => ({
