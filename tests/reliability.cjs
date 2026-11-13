@@ -2435,7 +2435,7 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     // persists position when streamed out, and physically blocks an approaching player.
     const second = new ArcherSystem(g, g.run, g.groundY, g.player, direction => hits.push(direction), () => {});
     g.cameras.main.setScroll(perch.x - 700, 0);
-    g.player.x = perch.x - 650; g.player.y = g.groundY - perch.height - ARCHER.footOffset;
+    g.player.x = perch.x - 1100; g.player.y = g.groundY - perch.height - ARCHER.footOffset;
     second.prepare();
     const patrol = second.archers[0];
     assert.ok(patrol, 'A living archer spawns on the platform');
@@ -2620,4 +2620,33 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     assert.equal(bonker.sprite.active, false, 'Death art is cleaned up');
     archers.destroy(); g.events.emit('shutdown');
     console.log('PASS Pyromancer game combat: casting, persistent fireball, bonk without shot and death animation.');
+}
+
+
+// Doubling range must affect actual casting, not just projectile lifetime.
+// Platform-bound Pyromancers must not stall at the ledge waiting to get closer.
+{
+    const { game: g } = fixture();
+    const { ArcherSystem } = load('systems/ArcherSystem');
+    const { ARCHER } = load('config/archers');
+    assert.equal(ARCHER.detectionRange, 900);
+    assert.equal(ARCHER.projectileRange, 1400);
+    assert.equal(ARCHER.preferredRange, 300);
+    const sys = new ArcherSystem(g, g.run, g.groundY, g.player, () => {}, () => {});
+    const perch = generateSection(1, g.run.seed).platforms[3];
+    g.cameras.main.setScroll(perch.x - 700, 0);
+    g.player.y = g.groundY - perch.height - ARCHER.footOffset;
+    g.player.x = perch.x - 800;
+    sys.prepare();
+    const pyro = sys.archers[0];
+    assert.ok(pyro);
+    sys.update(0.02);
+    assert.equal(pyro.state, 'aim', 'Pyromancer aims at a target 800px away without chasing');
+    assert.equal(pyro.sprite.x, perch.x, 'Aiming at range does not move off the ledge');
+    sys.update(ARCHER.aimDuration + 0.01);
+    assert.equal(pyro.state, 'reload', 'Distant Pyromancer actually releases a shot');
+    assert.ok(sys.arrows.length > 0, 'Shot exists while travelling across long range');
+    sys.destroy();
+    g.events.emit('shutdown');
+    console.log('PASS Pyromancer doubled range: 900px detection and 1400px projectile, distant casting.');
 }
