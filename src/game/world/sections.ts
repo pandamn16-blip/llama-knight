@@ -5,6 +5,8 @@ import { generatePlatforms, generateTerrainGaps, groundExists, terrainLayoutKind
 import type { TerrainGap, TerrainLayoutKind } from './terrain';
 import type { TerrainPlatform } from './terrain';
 import { generateHazards } from './hazards';
+import { generateBreakableWalls } from './terrainFeatures';
+import type { BreakableWall } from './terrainFeatures';
 import type { HazardPlacement } from './hazards';
 import { generateLandmarks } from './landmarks';
 import type { Landmark } from './landmarks';
@@ -21,6 +23,7 @@ export interface WorldSection {
     structures: StructurePlacement[];
     platforms: TerrainPlatform[];
     hazards: HazardPlacement[];
+    walls: BreakableWall[];
     gaps: TerrainGap[];
     layout: TerrainLayoutKind;
     landmarks: Landmark[];
@@ -86,9 +89,11 @@ export function generateSection(index: number, runSeed: number): WorldSection {
     const hazards = generateHazards(index, runSeed,
         sectionSeed(runSeed ^ 0x48415a44, index), gaps, platforms,
         [...enemies.map(e => e.x), ...structures.map(item => item.x)]);
+    const walls = generateBreakableWalls(index, runSeed, gaps,
+        [...enemies.map(e => e.x), ...structures.map(s => s.x), ...hazards.map(h => h.x)]);
     return { id: `${runSeed >>> 0}:${index}`, index, startX, endX,
         seed: sectionSeed(runSeed, index), sceneryXs, enemies, structures,
-        platforms, hazards, gaps, layout: terrainLayoutKind(index),
+        platforms, hazards, walls, gaps, layout: terrainLayoutKind(index),
         landmarks: generateLandmarks(index, runSeed, sectionSeed(runSeed ^ 0x4c414e44, index))
             .filter(item => safeGround(item.x)) };
 }
