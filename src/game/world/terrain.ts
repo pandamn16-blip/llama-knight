@@ -1,5 +1,4 @@
 import { WORLD } from '../config/world';
-import { sectionSeed } from './sections';
 
 export interface TerrainPlatform {
     id: string;
@@ -10,9 +9,8 @@ export interface TerrainPlatform {
 
 // A small, entirely optional selection of reachable ledges. Every section retains
 // a continuous ground route; these layouts do not require precision platforming.
-export function generatePlatforms(index: number, seed: number): TerrainPlatform[] {
+export function generatePlatforms(index: number, seed: number, roll: number): TerrainPlatform[] {
     const start = index * WORLD.sectionLength;
-    const roll = sectionSeed(seed ^ 0x54455252, index);
     const layout = roll % 3;
     const slots = layout === 0 ? [560, 1472] : layout === 1 ? [768, 1752] : [480, 1280, 2064];
     return slots.map((offset, i) => ({
