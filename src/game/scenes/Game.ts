@@ -83,6 +83,7 @@ export class Game extends Phaser.Scene {
         this.playerInput = new PlayerInput(this, () => this.run.phase === 'playing', CHARACTERS[this.run.characterId].canShield === true);
 
         this.enemySystem = new EnemySystem(this, this.run, this.groundY, this.player);
+        this.enemySystem.setTerrain(this.world);
         this.enemySystem.prepare(); // Before the first gameplay render, including both approach buffers.
         this.xpSystem = new XpSystem(this, this.run, this.player,
             () => this.openLevelUp(), () => this.updateHud());
@@ -99,10 +100,12 @@ export class Game extends Phaser.Scene {
         this.archerSystem = new ArcherSystem(this, this.run, this.groundY, this.player,
             x => this.combatSystem.resolveArcherArrow(x),
             (x, y) => { this.run.kills++; this.xpSystem.dropGem(x, y); this.updateHud(); });
+        this.archerSystem.setTerrain(this.world);
         this.archerSystem.prepare();
         this.combatSystem = new CombatSystem(this, this.run, this.player, this.enemySystem,
             (x, y) => this.xpSystem.dropGem(x, y), () => this.endGame(), () => this.updateHud(),
             () => this.rosie.speak('damage'), this.structures, this.archerSystem);
+        this.combatSystem.setTerrain(this.world);
 
         this.hud = new Hud(this);
         if (import.meta.env.DEV && WORLD.debugOverlay) {
