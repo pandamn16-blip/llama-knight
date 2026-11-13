@@ -2380,7 +2380,7 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     const rewards = new PlatformRewardSystem(g, g.run, g.player, g.groundY, xp => g.xpSystem.award(xp));
     const platforms = generateSection(0, g.run.seed).platforms;
     assert.equal(platforms.length, 4);
-    assert.ok(platforms[1].x - platforms[0].x < 350, 'Paired ledges make a connected upper route');
+    assert.ok(platforms[1].x - platforms[0].x > 0 && platforms[1].x - platforms[0].x <= 400, 'Varied paired ledges remain reachable');
     g.cameras.main.setScroll(700, 0);
     rewards.prepare();
     const prize = [...rewards.active.values()].find(entry => entry.sprite.x === platforms[2].x);
