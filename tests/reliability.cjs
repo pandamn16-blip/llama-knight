@@ -1797,6 +1797,9 @@ console.log('PASS endless foundation: seeded sections, unbounded forward movemen
     const collectedId = g.xpSystem.gems.at(-1).id;
     g.player.x = 1800; g.xpSystem.update(0); assert.equal(g.run.xp, 1);
     const descriptions = new Map();
+    // Track section-owned objects by identity: terrain now includes multiple
+    // landmark shape families, not just the original three rectangle colours.
+    const sectionObjectsSeen = new Set();
     let maxActive = 0;
     const check = scroll => {
         g.cameras.main.setScroll(scroll, 0); g.player.x = scroll + 400;
@@ -1812,12 +1815,13 @@ console.log('PASS endless foundation: seeded sections, unbounded forward movemen
             assert.equal(JSON.stringify(section.data), descriptions.get(index));
             terrain.push(...section.objects);
         }
-        const terrainKeys = terrain.map(object => `${object.args[2]}:${object.x}:${object.y}`);
-        assert.equal(new Set(terrainKeys).size, terrain.length);
-        // Include the optional ledge body and edge colours in active-terrain accounting.
-        const terrainColours = [0x8195a7, 0x65865b, 0x425b3c, 0x95734f, 0x86b35b];
-        const activeTerrain = objects.filter(object => object.active && object.kind === 'rectangle' && terrainColours.includes(object.args[2]));
-        assert.equal(activeTerrain.length, terrain.length, 'No live orphan terrain after unload/reload');
+        for (const object of terrain) {
+            assert.equal(object.active, true, 'Loaded section objects are active');
+            sectionObjectsSeen.add(object);
+        }
+        const liveWorld = [...sectionObjectsSeen].filter(object => object.active);
+        assert.equal(liveWorld.length, terrain.length, 'No live orphan terrain after unload/reload');
+        assert.ok(liveWorld.every(object => terrain.includes(object)));
         const enemies = g.enemySystem.enemies;
         assert.equal(new Set(enemies.map(enemy => enemy.placementId)).size, enemies.length);
         assert.ok(!enemies.some(enemy => enemy.placementId === deadId));
@@ -1841,7 +1845,7 @@ console.log('PASS endless foundation: seeded sections, unbounded forward movemen
     assert.equal(JSON.stringify([...g.enemySystem.records].sort()), savedEnemyState);
     for (let scroll = 0; scroll <= end; scroll += 160) check(scroll);
     assert.equal(JSON.stringify([...g.enemySystem.records].sort()), savedEnemyState);
-    assert.ok(maxActive < 200);
+    assert.ok(maxActive < 300, `Section streaming should remain bounded with landmarks: ${maxActive}`);
     g.events.emit('shutdown');
     assert.equal(g.world.sections.size, 0); assert.equal(g.enemySystem.records.size, 0);
     assert.equal(g.xpSystem.gems.length, 0); assert.equal(g.xpSystem.dormant.size, 0);
