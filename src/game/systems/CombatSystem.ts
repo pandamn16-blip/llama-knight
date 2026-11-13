@@ -37,10 +37,9 @@ export class CombatSystem {
         return true;
     }
 
-    resolveArcherArrow(arrowX: number): void {
+    resolveArcherArrow(sourceDirection: -1 | 1): void {
         if (this.run.phase !== 'playing') return;
-        const direction = arrowX < this.player.x ? -1 : 1;
-        if (this.player.isShielding && this.player.facing === direction) this.blockImpact();
+        if (this.player.isShielding && this.player.facing === sourceDirection) this.blockImpact();
         else this.takeDamage(1);
     }
 
