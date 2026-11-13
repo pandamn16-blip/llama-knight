@@ -6,7 +6,7 @@ export const ARCHER = {
     projectileSpeed: 285, projectileRange: 1400,
     arrowHitRadius: 25, activationMargin: 175,
     patrolSpeed: 36, chaseSpeed: 90, preferredRange: 300,
-    ledgeInset: 35, contactRange: 55, contactHeight: 55, contactWindup: 0.55,
+    ledgeInset: 35, contactRange: 85, contactHeight: 55, contactWindup: 0.55,
     // Combined centre separation for the Pyromancer body and playable character.
     // The previous 42px let the player visibly penetrate the wide pancake stack.
     contactWidth: 68,
