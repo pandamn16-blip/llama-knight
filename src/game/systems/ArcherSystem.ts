@@ -59,8 +59,12 @@ export class ArcherSystem {
             if (archer.hp <= 0 || !archer.sprite.active ||
                 Math.abs(y - archer.sprite.y) >= BALANCE.player.contactHeight) continue;
             const x = archer.sprite.x;
-            if (to > from && from <= x) to = Math.min(to, Math.max(from, x - ARCHER.contactWidth));
-            else if (to < from && from >= x) to = Math.max(to, Math.min(from, x + ARCHER.contactWidth));
+            // Stop at the near surface, including when already partially
+            // overlapping. Never prevent a player moving away from an enemy.
+            if (to > from && from < x && to > x - ARCHER.contactWidth)
+                to = Math.min(to, Math.max(from, x - ARCHER.contactWidth));
+            else if (to < from && from > x && to < x + ARCHER.contactWidth)
+                to = Math.max(to, Math.min(from, x + ARCHER.contactWidth));
         }
         return to;
     }
@@ -70,9 +74,11 @@ export class ArcherSystem {
         const clampedTarget = Math.max(archer.minX, Math.min(archer.maxX, target));
         let to = from + Math.sign(clampedTarget - from) * Math.min(Math.abs(clampedTarget - from), speed * dt);
         if (this.player && Math.abs(this.player.y - archer.sprite.y) < BALANCE.player.contactHeight) {
-            if (to > from && from <= this.player.x)
+            if (to > from && from < this.player.x &&
+                to > this.player.x - ARCHER.contactWidth)
                 to = Math.min(to, Math.max(from, this.player.x - ARCHER.contactWidth));
-            else if (to < from && from >= this.player.x)
+            else if (to < from && from > this.player.x &&
+                to < this.player.x + ARCHER.contactWidth)
                 to = Math.max(to, Math.min(from, this.player.x + ARCHER.contactWidth));
         }
         if (to !== from) archer.facing = to < from ? -1 : 1;
@@ -209,7 +215,7 @@ export class ArcherSystem {
                 PYROMANCER_FIREBALL.key, PYROMANCER_FIREBALL.start)
                 .setOrigin(0.5, 0.5).setScale(ARCHER.fireballScale)
                 .setFlipX(archer.facing === -1).setDepth(7).setScrollFactor(1);
-            // Plays its six frames once, then Phaser keeps the final frame visible
+            // Plays only early flight frames once, then Phaser holds the last flight frame
             // until the actual swept collision or range cleanup. No looping/vanishing.
             fireball.play(PYROMANCER_FIREBALL.animationKey);
             sprite = fireball;
@@ -295,7 +301,7 @@ export class ArcherSystem {
         for (let i = this.arrows.length - 1; i >= 0; i--) {
             const arrow = this.arrows[i], { sprite } = arrow;
             if (arrow.impactRemaining !== undefined) {
-                // A real impact already dealt its damage exactly once. Let frame 5
+                // A real impact already dealt its damage exactly once. Let impact frame 5
                 // flash briefly on the hit location; never move or damage again.
                 arrow.impactRemaining -= dt;
                 if (arrow.impactRemaining <= 0) {
@@ -316,7 +322,7 @@ export class ArcherSystem {
             arrow.distance += distance;
             if (hit) {
                 // Stop at the actual swept contact point. Frame 5 is exclusively
-                // the hit effect; frame 4 remains displayed during flight.
+                // the hit effect; frame 3 remains displayed during flight.
                 sprite.x = fromX + vx * t;
                 sprite.y = fromY + vy * t;
                 if ('setFrame' in sprite && hasPyromancerFireball(this.scene)) {
