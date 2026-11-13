@@ -2430,6 +2430,38 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     assert.equal(archers.archers.length, 0, 'Dead archer does not respawn on return');
     archers.destroy(); g.events.emit('shutdown');
     console.log('PASS Bread Archers: spawn, aiming tell, projectile, combat damage and persistent death.');
+    const { ARCHER } = load('config/archers');
+    // A fresh archer patrols its own platform, never walks off an edge,
+    // persists position when streamed out, and physically blocks an approaching player.
+    const second = new ArcherSystem(g, g.run, g.groundY, g.player, direction => hits.push(direction), () => {});
+    g.cameras.main.setScroll(perch.x - 700, 0);
+    g.player.x = perch.x - 650; g.player.y = g.groundY - perch.height - ARCHER.footOffset;
+    second.prepare();
+    const patrol = second.archers[0];
+    assert.ok(patrol, 'A living archer spawns on the platform');
+    const start = patrol.sprite.x;
+    second.update(0.3);
+    assert.ok(patrol.sprite.x > start, 'A non-engaged archer patrols');
+    for (let step = 0; step < 150; step++) second.update(0.2);
+    assert.ok(patrol.sprite.x >= patrol.minX && patrol.sprite.x <= patrol.maxX,
+        'Patrol stays on the ledge');
+    const savedX = patrol.sprite.x;
+    g.cameras.main.setScroll(14000, 0); second.prepare();
+    g.cameras.main.setScroll(perch.x - 700, 0); second.prepare();
+    assert.equal(second.archers[0].sprite.x, savedX, 'Patrol position persists when streaming');
+    const body = second.archers[0];
+    const blocked = second.resolvePlayerMovement(body.sprite.x - 120, body.sprite.x + 30, body.sprite.y);
+    assert.equal(blocked, body.sprite.x - ARCHER.contactWidth);
+    assert.equal(second.resolvePlayerMovement(body.sprite.x - 120, body.sprite.x + 30,
+        body.sprite.y + 160), body.sprite.x + 30, 'No body blocking across different heights');
+    g.player.x = body.sprite.x - 38; g.player.y = body.sprite.y;
+    body.state = 'watch';
+    second.update(0.02);
+    assert.equal(body.state, 'aim', 'Close enemy telegraphs a strike');
+    second.update(ARCHER.contactWindup + 0.02);
+    assert.ok(hits.length >= 2, 'A close-range strike can damage the player');
+    second.destroy();
+
 }
 
 
@@ -2447,9 +2479,21 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     assert.equal(PYROMANCER_IDLE.originY, 224 / 256);
     const requests = [];
     loadPyromancerIdle({ load: { spritesheet: (...params) => requests.push(params) } });
-    assert.equal(requests.length, 1);
+    assert.equal(requests.length, 2, 'Both idle and run spritesheets load');
     assert.equal(requests[0][0], PYROMANCER_IDLE.key);
     assert.equal(requests[0][1], PYROMANCER_IDLE.path);
     assert.equal(requests[0][2].endFrame, 5);
-    console.log('PASS pancake archer idle: original six-frame RGBA image and loader contract.');
+    const { PYROMANCER_RUN, hasPyromancerRun } = load('enemies/pyromancer');
+    const runPng = fs.readFileSync(path.join(__dirname, '../public/assets', PYROMANCER_RUN.path));
+    assert.equal(runPng.subarray(1, 4).toString('ascii'), 'PNG');
+    assert.equal(runPng.readUInt32BE(16), 1536, 'Run sheet contains six 256px frames');
+    assert.equal(runPng.readUInt32BE(20), 256);
+    assert.equal(runPng[25], 6, 'Run sheet is RGBA');
+    assert.equal(PYROMANCER_RUN.scale, PYROMANCER_IDLE.scale);
+    assert.equal(PYROMANCER_RUN.originY, PYROMANCER_IDLE.originY);
+    assert.equal(typeof hasPyromancerRun, 'function');
+    assert.equal(requests.length, 2, 'Both idle and run sheets are loaded');
+    assert.equal(requests[1][0], PYROMANCER_RUN.key);
+    assert.equal(requests[1][2].endFrame, 5);
+    console.log('PASS pancake animations: idle/run sheets, transparent RGBA frames, matching anchors.');
 }

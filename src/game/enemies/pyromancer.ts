@@ -18,22 +18,43 @@ export const PYROMANCER_IDLE = {
     scale: 0.5
 } as const;
 
+// Run sheet uses the same 6 x 256px grounded frame contract as idle.
+// Keeping one origin and scale prevents a visual hop when changing states.
+export const PYROMANCER_RUN = {
+    ...PYROMANCER_IDLE,
+    key: 'pyromancer:run',
+    animationKey: 'pyromancer:run',
+    path: 'enemies/pyromancer-pancake/run.png',
+    fps: 9
+} as const;
+
+const sheets = [PYROMANCER_IDLE, PYROMANCER_RUN] as const;
+
 export function loadPyromancerIdle(scene: Scene): void {
-    scene.load.spritesheet(PYROMANCER_IDLE.key, PYROMANCER_IDLE.path,
-        { frameWidth: 256, frameHeight: 256, startFrame: 0, endFrame: 5 });
+    for (const sheet of sheets) {
+        scene.load.spritesheet(sheet.key, sheet.path,
+            { frameWidth: 256, frameHeight: 256, startFrame: sheet.start, endFrame: sheet.end });
+    }
 }
 
 export function registerPyromancerIdle(scene: Scene): void {
-    const spec = PYROMANCER_IDLE;
-    if (scene.anims.exists(spec.animationKey) || !hasSpriteFrames(scene, spec, spec)) return;
-    scene.anims.create({
-        key: spec.animationKey,
-        frames: scene.anims.generateFrameNumbers(spec.key, { start: spec.start, end: spec.end }),
-        frameRate: spec.fps, repeat: spec.repeat
-    });
+    for (const sheet of sheets) {
+        if (scene.anims.exists(sheet.animationKey) ||
+            !hasSpriteFrames(scene, sheet, sheet)) continue;
+        scene.anims.create({
+            key: sheet.animationKey,
+            frames: scene.anims.generateFrameNumbers(sheet.key, { start: sheet.start, end: sheet.end }),
+            frameRate: sheet.fps, repeat: sheet.repeat
+        });
+    }
 }
 
 export function hasPyromancerIdle(scene: Scene): boolean {
     return hasSpriteFrames(scene, PYROMANCER_IDLE, PYROMANCER_IDLE) &&
         scene.anims.exists(PYROMANCER_IDLE.animationKey);
+}
+
+export function hasPyromancerRun(scene: Scene): boolean {
+    return hasSpriteFrames(scene, PYROMANCER_RUN, PYROMANCER_RUN) &&
+        scene.anims.exists(PYROMANCER_RUN.animationKey);
 }
