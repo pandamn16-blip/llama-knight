@@ -57,7 +57,10 @@ export class WorldSystem {
             const x = first + tile * (i + 0.5);
             const key = i === 0 ? 'breadlands:platform-left' :
                 i === count - 1 ? 'breadlands:platform-right' : 'breadlands:platform-middle';
-            result.push(this.tile(x, top + 12, tile, 24, key, 0x95734f, 3));
+            // Full-size art tiles are never squashed to placeholder ledge height.
+            result.push(terrainTexture(this.scene, key) ?
+                this.tile(x, top + tile / 2, tile, tile, key, 0x95734f, 3) :
+                this.tile(x, top + 12, tile, 24, key, 0x95734f, 3));
             result.push(this.scene.add.rectangle(x, top + 1.5, tile, 3, 0x86b35b).setDepth(4));
         }
         return result;
