@@ -1,5 +1,5 @@
 import { Scenes } from 'phaser';
-import type { Scene, GameObjects } from 'phaser';
+import type { Scene, GameObjects, Time } from 'phaser';
 import { WORLD } from '../config/world';
 import { BALANCE } from '../config/balance';
 import { ARCHER } from '../config/archers';
@@ -43,6 +43,7 @@ export class ArcherSystem {
     private records = new Map<string, ArcherRecord>();
     private arrows: Arrow[] = [];
     private dying: Dying[] = [];
+    private hitFlashTimers = new Map<string, Time.TimerEvent>();
 
     constructor(private scene: Scene, private run: RunState,
         private groundY: number, private player: Pick<Player, 'x' | 'y'>,
@@ -113,6 +114,8 @@ export class ArcherSystem {
             if (archer.sprite.x < camera.scrollX - retain || archer.sprite.x > camera.scrollX + camera.width + retain) {
                 const record = this.records.get(id);
                 if (record) { record.x = archer.sprite.x; record.patrolDirection = archer.patrolDirection; }
+                this.hitFlashTimers.get(id)?.remove(false);
+                this.hitFlashTimers.delete(id);
                 archer.sprite.destroy(); this.active.delete(id);
             }
         }
@@ -165,7 +168,21 @@ export class ArcherSystem {
         if (this.run.phase !== 'playing' || this.active.get(archer.id) !== archer) return false;
         const record = this.records.get(archer.id)!;
         record.hp = archer.hp = Math.max(0, archer.hp - amount);
-        if (archer.hp > 0) return false;
+        // Match Bread's non-lethal damage feedback. Restart on repeated hits
+        // so an earlier timeout cannot end the flash prematurely.
+        this.hitFlashTimers.get(archer.id)?.remove(false);
+        this.hitFlashTimers.delete(archer.id);
+        if (archer.hp > 0) {
+            archer.sprite.setAlpha(0.5);
+            const timer = this.scene.time.delayedCall(BALANCE.effects.enemyHitDuration, () => {
+                if (this.hitFlashTimers.get(archer.id) !== timer) return;
+                this.hitFlashTimers.delete(archer.id);
+                if (archer.sprite.active) archer.sprite.setAlpha(1);
+            });
+            this.hitFlashTimers.set(archer.id, timer);
+            return false;
+        }
+        archer.sprite.setAlpha(1);
         record.dead = true;
         this.active.delete(archer.id);
         const { x, y } = archer.sprite;
@@ -343,6 +360,8 @@ export class ArcherSystem {
 
     destroy(): void {
         this.scene.events.off(Scenes.Events.SHUTDOWN, this.destroy, this);
+        for (const timer of this.hitFlashTimers.values()) timer.remove(false);
+        this.hitFlashTimers.clear();
         for (const archer of this.active.values()) archer.sprite.destroy();
         for (const arrow of this.arrows) arrow.sprite.destroy();
         for (const death of this.dying) death.sprite.destroy();
