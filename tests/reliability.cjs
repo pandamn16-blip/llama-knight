@@ -2812,3 +2812,44 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     breadSystem.destroy(); g.events.emit('shutdown');
     console.log('PASS terrain obscures covered Bread heads and blocks attacks through ledges.');
 }
+
+
+// Every real combat hit displays a floating damage number; shields and
+// invulnerability do not show a number when no health was lost.
+{
+    const { game: g } = fixture();
+    const combat = g.combatSystem;
+    const startingHp = g.run.health;
+    g.run.lastDamage = -1000;
+    g.run.runTime = 0;
+    combat.resolveArcherArrow(-1);
+    assert.equal(g.run.health, startingHp - 1);
+    assert.equal(combat.damageTicks.size, 1, 'Incoming projectile hit shows -1');
+    let tick = [...combat.damageTicks][0];
+    assert.equal(tick.text, '-1');
+    assert.equal(tick.args[1].color, '#ff3030', 'Incoming damage is red');
+    g.run.runTime = 0.2;
+    combat.resolveArcherArrow(-1);
+    assert.equal(combat.damageTicks.size, 1, 'No tick during damage cooldown');
+
+    g.run.runTime = 1.1;
+    const bread = g.enemySystem.spawnBread(600);
+    assert.ok(bread);
+    const enemyHp = bread.hp;
+    combat.hitTarget(bread, 2);
+    assert.equal(bread.hp, enemyHp - 2);
+    tick = [...combat.damageTicks].at(-1);
+    assert.equal(tick.text, '-2', 'Outgoing damage reflects attack strength');
+    assert.equal(tick.args[1].color, '#ffe28a', 'Enemy damage uses warm gold');
+    combat.hitTarget(bread, 999);
+    tick = [...combat.damageTicks].at(-1);
+    assert.equal(tick.text, `-${enemyHp - 2}`, 'Finishing blow shows actual HP removed');
+
+    const before = combat.damageTicks.size;
+    g.run.phase = 'paused';
+    combat.resolveArcherArrow(-1);
+    assert.equal(combat.damageTicks.size, before, 'Paused combat produces no ticks');
+    g.events.emit('shutdown');
+    assert.equal(combat.damageTicks.size, 0, 'Damage number effects cleaned up');
+    console.log('PASS universal floating damage numbers: incoming, cooldown, enemy and lethal hits.');
+}
