@@ -2745,6 +2745,7 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     fire.prepare();
     const pyro = fire.archers[0];
     assert.ok(pyro);
+    assert.equal(ARCHER.standHeight, 30, 'Landing height is on the pancake stack beneath the flame crown');
     const pyroTop = pyro.sprite.y - ARCHER.standHeight;
     assert.equal(fire.landingY(pyro.sprite.x, pyroTop - 4, pyroTop + 4), pyroTop);
     assert.equal(fire.landingY(pyro.sprite.x, pyroTop + 5, pyroTop - 4), undefined);
@@ -2757,12 +2758,18 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     const beforeBurn = g.run.health;
     g.combatSystem.resolvePyromancerFireContact();
     assert.equal(g.run.health, beforeBurn - 1, 'Pyromancer burns a rider');
+    assert.equal(g.combatSystem.fireTicks.size, 1, 'A successful fire hit shows a damage tick');
+    const firstTick = [...g.combatSystem.fireTicks][0];
+    assert.equal(firstTick.text, '-1');
+    assert.equal(firstTick.args[1].color, '#ff3030', 'Fire damage number is red');
     g.run.runTime = 0.5;
     g.combatSystem.resolvePyromancerFireContact();
     assert.equal(g.run.health, beforeBurn - 1, 'Cooldown prevents per-frame burning');
+    assert.equal(g.combatSystem.fireTicks.size, 1, 'No duplicate tick during invulnerability');
     g.run.runTime = 1;
     g.combatSystem.resolvePyromancerFireContact();
     assert.equal(g.run.health, beforeBurn - 2, 'Fire burns again after cooldown');
+    assert.equal(g.combatSystem.fireTicks.size, 2, 'Next real fire hit shows another red tick');
     g.player.x += 100;
     assert.equal(fire.playerStandingOnPyromancer(), false);
     g.run.runTime = 2;
