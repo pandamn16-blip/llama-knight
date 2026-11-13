@@ -7,6 +7,8 @@ import type { WorldSection } from './sections';
 import { landingSurfaceY, standingSurfaceY, terrainSegmentImpact, headCoveredByPlatform } from './terrain';
 import type { TerrainImpact } from './terrain';
 import type { TerrainPlatform, TerrainGap } from './terrain';
+import { terrainPieces, segmentWallImpact } from './terrainFeatures';
+import type { TerrainPiece, BreakableWall } from './terrainFeatures';
 import type { Landmark } from './landmarks';
 import { terrainTexture, ENVIRONMENT_ASSETS } from './environmentAssets';
 
@@ -14,6 +16,7 @@ type SectionVisuals = {
     data: WorldSection;
     objects: GameObjects.GameObject[];
     scenery: GameObjects.Ellipse[];
+    features: Map<string, GameObjects.GameObject[]>;
 };
 
 // Deterministic geometry is separate from optional terrain textures. The ground
@@ -21,6 +24,8 @@ type SectionVisuals = {
 export class WorldSystem {
     private sections = new Map<number, SectionVisuals>();
     private backgrounds: { sprite: GameObjects.TileSprite; factor: number }[] = [];
+    private mutable = new Map<string, { hp?: number; breakUntil?: number; triggerAt?: number }>();
+    private clock = 0;
 
     constructor(private scene: Scene, private seed: number, private groundY: number) {
         scene.events.once(Scenes.Events.SHUTDOWN, this.destroy, this);
@@ -196,9 +201,26 @@ export class WorldSystem {
                 }
             }
         }
-        for (const platform of data.platforms) objects.push(...this.drawPlatform(platform));
+        const features = new Map<string, GameObjects.GameObject[]>();
+        for (const piece of terrainPieces(data.platforms, data.index)) {
+            const objectsForPiece = this.drawPlatform(piece);
+            features.set(piece.id, objectsForPiece);
+            objects.push(...objectsForPiece);
+        }
+        for (const wall of data.walls) {
+            const blocks: GameObjects.GameObject[] = [
+                this.scene.add.rectangle(wall.x, this.groundY - wall.height / 2,
+                    wall.width, wall.height, 0x857b6c).setDepth(5),
+                this.scene.add.rectangle(wall.x, this.groundY - wall.height / 2,
+                    5, wall.height - 12, 0x40372e).setDepth(6),
+                this.scene.add.rectangle(wall.x, this.groundY - 26,
+                    wall.width - 8, 5, 0xbab0a0).setDepth(6)
+            ];
+            features.set(wall.id, blocks);
+            objects.push(...blocks);
+        }
         for (const landmark of data.landmarks) objects.push(...this.drawLandmark(landmark));
-        return { data, objects, scenery };
+        return { data, objects, scenery, features };
     }
 
     private platformsNear(x: number): TerrainPlatform[] {
@@ -207,15 +229,147 @@ export class WorldSystem {
         for (const i of [index - 1, index, index + 1]) {
             if (i < 0) continue;
             const data = this.sections.get(i)?.data ?? generateSection(i, this.seed);
-            result.push(...data.platforms);
+            result.push(...terrainPieces(data.platforms, i).filter(p => this.piecePresent(p)));
         }
         return result;
     }
 
+    private wallsNear(x: number): BreakableWall[] {
+        const index = Math.floor(x / WORLD.sectionLength);
+        const walls: BreakableWall[] = [];
+        for (const i of [index - 1, index, index + 1]) {
+            if (i < 0) continue;
+            const data = this.sections.get(i)?.data ?? generateSection(i, this.seed);
+            walls.push(...data.walls.filter(w => this.wallPresent(w)));
+        }
+        return walls;
+    }
+
+    private wallPresent(wall: BreakableWall): boolean {
+        return (this.mutable.get(wall.id)?.hp ?? wall.hp) > 0;
+    }
+
+    private piecePresent(piece: TerrainPiece): boolean {
+        const state = this.mutable.get(piece.id);
+        return piece.feature === 'bridge' ? (state?.hp ?? 2) > 0 :
+            piece.feature === 'crumble' ? state?.breakUntil === undefined ||
+                this.clock >= state.breakUntil : true;
+    }
+
+    // Called with simulation dt: all warning and respawn clocks pause naturally.
+    advance(dt: number, playerX: number, foot: number): void {
+        this.clock += dt;
+        const section = Math.floor(playerX / WORLD.sectionLength);
+        if (section < 0) return;
+        const data = this.sections.get(section)?.data ?? generateSection(section, this.seed);
+        for (const piece of terrainPieces(data.platforms, section)) {
+            if (piece.feature !== 'crumble') continue;
+            const state = this.mutable.get(piece.id) ?? {};
+            if (state.breakUntil !== undefined && this.clock >= state.breakUntil) {
+                state.breakUntil = undefined;
+                state.triggerAt = undefined;
+                this.mutable.delete(piece.id);
+            }
+            if (state.breakUntil !== undefined) continue;
+            if (Math.abs(playerX - piece.x) > piece.width / 2 - 4 ||
+                Math.abs(foot - (this.groundY - piece.height)) > 3) continue;
+            if (state.triggerAt === undefined) state.triggerAt = this.clock;
+            if (this.clock - state.triggerAt >= 0.8) {
+                state.breakUntil = this.clock + 4;
+                state.triggerAt = undefined;
+            }
+            this.mutable.set(piece.id, state);
+        }
+    }
+
     // Terrain determines whether a fireball/strike reaches its target first.
     terrainImpact(x0: number, y0: number, x1: number, y1: number): TerrainImpact | undefined {
-        return terrainSegmentImpact(this.platformsNear((x0 + x1) / 2),
-            this.groundY, x0, y0, x1, y1, this.gapsNear((x0 + x1) / 2));
+        const mid = (x0 + x1) / 2;
+        const surface = terrainSegmentImpact(this.platformsNear(mid),
+            this.groundY, x0, y0, x1, y1, this.gapsNear(mid));
+        let nearest = surface;
+        for (const wall of this.wallsNear(mid)) {
+            const t = segmentWallImpact(x0, y0, x1, y1, wall, this.groundY);
+            if (t !== undefined && (!nearest || t < nearest.t))
+                nearest = { t, x: x0 + (x1 - x0) * t, y: y0 + (y1 - y0) * t };
+        }
+        return nearest;
+    }
+
+    // A wall is genuinely solid, but its destruction immediately opens a route.
+    resolvePlayerMovement(from: number, to: number, playerY: number): number {
+        if (Math.abs(playerY - (this.groundY - BALANCE.player.groundOffset)) > 80)
+            return to;
+        for (const wall of this.wallsNear((from + to) / 2)) {
+            const edge = wall.width / 2 + 23;
+            if (to > from && from <= wall.x - edge && to >= wall.x - edge)
+                to = Math.min(to, wall.x - edge);
+            else if (to < from && from >= wall.x + edge && to <= wall.x + edge)
+                to = Math.max(to, wall.x + edge);
+        }
+        return to;
+    }
+
+    private damagePiece(id: string, baseHp: number, damage: number): number {
+        const hp = this.mutable.get(id)?.hp ?? baseHp;
+        const dealt = Math.min(hp, damage);
+        if (dealt > 0) this.mutable.set(id, { hp: hp - dealt });
+        return dealt;
+    }
+
+    // Called only after a projectile hits solid terrain; prevents shooting
+    // through stone while permitting breakable bridge boards and wall damage.
+    damageAtImpact(x: number, y: number, damage: number): number {
+        for (const wall of this.wallsNear(x)) {
+            if (Math.abs(wall.x - x) <= wall.width / 2 + 2 &&
+                y >= this.groundY - wall.height - 2 && y <= this.groundY + 2)
+                return this.damagePiece(wall.id, wall.hp, damage);
+        }
+        const index = Math.floor(x / WORLD.sectionLength);
+        for (const i of [index - 1, index, index + 1]) {
+            if (i < 0) continue;
+            const data = this.sections.get(i)?.data ?? generateSection(i, this.seed);
+            for (const piece of terrainPieces(data.platforms, i)) {
+                if (piece.feature !== 'bridge' || !this.piecePresent(piece)) continue;
+                const top = this.groundY - piece.height;
+                if (Math.abs(x - piece.x) <= piece.width / 2 + 2 &&
+                    y >= top - 2 && y <= top + 26)
+                    return this.damagePiece(piece.id, 2, damage);
+            }
+        }
+        return 0;
+    }
+
+    // One swing damages the closest destructible in the attack direction,
+    // preserving the sword's existing attack range/cooldown.
+    strikeTerrain(x: number, y: number, direction: -1 | 1,
+        range: number, damage: number): { x: number; y: number; amount: number } | undefined {
+        const candidates: { x: number; y: number; id: string; hp: number; dist: number }[] = [];
+        for (const wall of this.wallsNear(x + direction * range / 2)) {
+            const dist = (wall.x - x) * direction;
+            if (dist > -wall.width / 2 && dist <= range + wall.width / 2 &&
+                Math.abs(y - (this.groundY - wall.height / 2)) < 78)
+                candidates.push({ x: wall.x, y: this.groundY - wall.height / 2,
+                    id: wall.id, hp: wall.hp, dist });
+        }
+        for (const i of [Math.floor(x / WORLD.sectionLength),
+            Math.floor((x + direction * range) / WORLD.sectionLength)]) {
+            if (i < 0) continue;
+            const data = this.sections.get(i)?.data ?? generateSection(i, this.seed);
+            for (const piece of terrainPieces(data.platforms, i)) {
+                if (piece.feature !== 'bridge' || !this.piecePresent(piece)) continue;
+                const dist = (piece.x - x) * direction;
+                if (dist < -piece.width / 2 || dist > range + piece.width / 2 ||
+                    Math.abs(y - (this.groundY - piece.height + 12)) > 72) continue;
+                candidates.push({ x: piece.x, y: this.groundY - piece.height,
+                    id: piece.id, hp: 2, dist });
+            }
+        }
+        candidates.sort((a, b) => a.dist - b.dist);
+        const target = candidates[0];
+        if (!target) return undefined;
+        const amount = this.damagePiece(target.id, target.hp, damage);
+        return amount > 0 ? { x: target.x, y: target.y, amount } : undefined;
     }
 
     enemyHeadExposed(x: number, enemyBodyY: number): boolean {
@@ -259,6 +413,19 @@ export class WorldSystem {
             this.sections.set(index, this.drawSection(generateSection(index, this.seed)));
         }
         for (const section of this.sections.values()) {
+            for (const [id, pieces] of section.features) {
+                const platform = terrainPieces(section.data.platforms, section.data.index)
+                    .find(p => p.id === id);
+                const wall = section.data.walls.find(w => w.id === id);
+                const visible = platform ? this.piecePresent(platform) : wall ? this.wallPresent(wall) : true;
+                const state = this.mutable.get(id);
+                const alpha = platform?.feature === 'crumble' && state?.triggerAt !== undefined ?
+                    0.45 : wall ? Math.max(0.35, (state?.hp ?? wall.hp) / wall.hp) : 1;
+                for (const piece of pieces) {
+                    piece.setVisible(visible);
+                    if ('setAlpha' in piece) piece.setAlpha(alpha);
+                }
+            }
             for (const block of section.scenery) {
                 const visible = block.x >= camera.scrollX - BALANCE.scenery.spacing &&
                     block.x <= camera.scrollX + camera.width + BALANCE.scenery.spacing;
@@ -273,5 +440,6 @@ export class WorldSystem {
         for (const layer of this.backgrounds) layer.sprite.destroy();
         this.backgrounds = [];
         this.sections.clear();
+        this.mutable.clear();
     }
 }
