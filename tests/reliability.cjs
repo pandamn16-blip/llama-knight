@@ -2479,7 +2479,7 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     assert.equal(PYROMANCER_IDLE.originY, 224 / 256);
     const requests = [];
     loadPyromancerIdle({ load: { spritesheet: (...params) => requests.push(params) } });
-    assert.equal(requests.length, 1);
+    assert.equal(requests.length, 2, 'Both idle and run spritesheets load');
     assert.equal(requests[0][0], PYROMANCER_IDLE.key);
     assert.equal(requests[0][1], PYROMANCER_IDLE.path);
     assert.equal(requests[0][2].endFrame, 5);
