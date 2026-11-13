@@ -51,6 +51,15 @@ export class WorldSystem {
         const count = Math.round(platform.width / tile);
         const first = platform.x - platform.width / 2;
         const result: GameObjects.GameObject[] = [];
+        // Until tile artwork is supplied, draw each ledge as two large shapes,
+        // not dozens of individual rectangles. Keeps streaming cost low.
+        if (!['breadlands:platform-left', 'breadlands:platform-middle', 'breadlands:platform-right']
+            .some(key => terrainTexture(this.scene, key))) {
+            return [
+                this.scene.add.rectangle(platform.x, top + 12, platform.width, 24, 0x95734f).setDepth(3),
+                this.scene.add.rectangle(platform.x, top + 1.5, platform.width, 3, 0x86b35b).setDepth(4)
+            ];
+        }
         // Narrow ledge body; full height is not solid, so players can jump through
         // its underside and land on the top surface.
         for (let i = 0; i < count; i++) {
