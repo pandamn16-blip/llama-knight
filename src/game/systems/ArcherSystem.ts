@@ -1,8 +1,9 @@
 import { Scenes } from 'phaser';
 import type { Scene, GameObjects } from 'phaser';
 import { WORLD } from '../config/world';
+import { BALANCE } from '../config/balance';
 import { ARCHER } from '../config/archers';
-import { hasPyromancerIdle, PYROMANCER_IDLE } from '../enemies/pyromancer';
+import { hasPyromancerIdle, hasPyromancerRun, PYROMANCER_IDLE, PYROMANCER_RUN } from '../enemies/pyromancer';
 import type { RunPhase } from '../state/RunState';
 import { generateSection, sectionWindow } from '../world/sections';
 import type { RunState } from '../state/RunState';
@@ -19,12 +20,17 @@ export type Archer = {
     facing: -1 | 1;
     warning: GameObjects.Text;
     art?: GameObjects.Sprite;
+    homeX: number;
+    minX: number;
+    maxX: number;
+    patrolDirection: -1 | 1;
+    animation?: 'idle' | 'run';
 };
-type ArcherRecord = { hp: number; dead: boolean };
+type ArcherRecord = { hp: number; dead: boolean; x?: number; patrolDirection?: -1 | 1 };
 type Arrow = { sprite: GameObjects.Container; vx: number; vy: number; distance: number };
 
-// Archers use their own, stationary elevated AI rather than modifying Bread's
-// ground patrol brain. No textures required; their placeholders are replaceable.
+// Pyromancers patrol their own raised ledges without changing Bread's ground AI.
+// Platform bounds and body collision are gameplay geometry, not artwork dimensions.
 export class ArcherSystem {
     private active = new Map<string, Archer>();
     private records = new Map<string, ArcherRecord>();
@@ -38,11 +44,52 @@ export class ArcherSystem {
 
     get archers(): readonly Archer[] { return [...this.active.values()]; }
 
+    // Same swept body-blocking as Bread, limited to overlapping heights.
+    resolvePlayerMovement(from: number, to: number, y: number): number {
+        for (const archer of this.active.values()) {
+            if (archer.hp <= 0 || !archer.sprite.active ||
+                Math.abs(y - archer.sprite.y) >= BALANCE.player.contactHeight) continue;
+            const x = archer.sprite.x;
+            if (to > from && from <= x) to = Math.min(to, Math.max(from, x - ARCHER.contactWidth));
+            else if (to < from && from >= x) to = Math.max(to, Math.min(from, x + ARCHER.contactWidth));
+        }
+        return to;
+    }
+
+    private walk(archer: Archer, target: number, speed: number, dt: number): boolean {
+        const from = archer.sprite.x;
+        const clampedTarget = Math.max(archer.minX, Math.min(archer.maxX, target));
+        let to = from + Math.sign(clampedTarget - from) * Math.min(Math.abs(clampedTarget - from), speed * dt);
+        if (this.player && Math.abs(this.player.y - archer.sprite.y) < BALANCE.player.contactHeight) {
+            if (to > from && from <= this.player.x)
+                to = Math.min(to, Math.max(from, this.player.x - ARCHER.contactWidth));
+            else if (to < from && from >= this.player.x)
+                to = Math.max(to, Math.min(from, this.player.x + ARCHER.contactWidth));
+        }
+        if (to !== from) archer.facing = to < from ? -1 : 1;
+        archer.sprite.x = to;
+        const record = this.records.get(archer.id);
+        if (record) record.x = to;
+        return Math.abs(to - clampedTarget) < 0.01;
+    }
+
+    private animate(archer: Archer, moving: boolean): void {
+        if (!archer.art) return;
+        const name = moving && hasPyromancerRun(this.scene) ? 'run' : 'idle';
+        if (archer.animation !== name) {
+            archer.animation = name;
+            archer.art.play(name === 'run' ? PYROMANCER_RUN.animationKey : PYROMANCER_IDLE.animationKey);
+        }
+        archer.art.setFlipX(archer.facing === -1);
+    }
+
     prepare(): void {
         const camera = this.scene.cameras.main;
         const retain = camera.width * WORLD.cleanupViewports;
         for (const [id, archer] of this.active) {
             if (archer.sprite.x < camera.scrollX - retain || archer.sprite.x > camera.scrollX + camera.width + retain) {
+                const record = this.records.get(id);
+                if (record) { record.x = archer.sprite.x; record.patrolDirection = archer.patrolDirection; }
                 archer.sprite.destroy(); this.active.delete(id);
             }
         }
@@ -56,7 +103,10 @@ export class ArcherSystem {
             if (record.dead || this.active.has(id) ||
                 perch.x < camera.scrollX - retain || perch.x > camera.scrollX + camera.width + retain) continue;
             this.records.set(id, record);
-            const sprite = this.scene.add.container(perch.x, this.groundY - perch.height - ARCHER.footOffset)
+            const minX = perch.x - perch.width / 2 + ARCHER.ledgeInset;
+            const maxX = perch.x + perch.width / 2 - ARCHER.ledgeInset;
+            const spawnX = Math.max(minX, Math.min(maxX, record.x ?? perch.x));
+            const sprite = this.scene.add.container(spawnX, this.groundY - perch.height - ARCHER.footOffset)
                 .setDepth(6).setScrollFactor(1);
             // The approved pancake pyromancer is the Archer's temporary visual skin.
             // Collision, attack timing and projectile behaviour stay unchanged.
@@ -82,7 +132,9 @@ export class ArcherSystem {
             }).setOrigin(0.5).setVisible(false);
             sprite.add(warning);
             this.active.set(id, { kind: 'archer', id, sprite, hp: record.hp, maxHealth: ARCHER.hp,
-                state: 'watch', timer: 0, facing: -1, warning, art });
+                state: 'watch', timer: 0, facing: -1, warning, art,
+                homeX: perch.x, minX, maxX, patrolDirection: record.patrolDirection ?? 1,
+                animation: art ? 'idle' : undefined });
         }
     }
 
@@ -125,22 +177,48 @@ export class ArcherSystem {
             archer.sprite.setVisible(visible);
             if (!visible) { archer.art?.anims.pause(); continue; }
             if (this.run.phase === 'playing') archer.art?.anims.resume();
-            archer.art?.setFlipX(archer.facing === -1);
+            const beforeX = archer.sprite.x;
+            const onSameLevel = Math.abs(this.player.y - archer.sprite.y) < ARCHER.detectionHeight;
             const inRange = Math.abs(dx) < ARCHER.detectionRange &&
-                Math.abs(this.player.y - archer.sprite.y) < ARCHER.detectionHeight;
+                onSameLevel;
             if (archer.state === 'watch') {
-                if (inRange) {
-                    archer.state = 'aim'; archer.timer = ARCHER.aimDuration;
+                if (inRange && Math.abs(dx) > ARCHER.preferredRange + ARCHER.contactWidth) {
+                    // Close the distance, but never leave this platform or walk through the player.
+                    this.walk(archer, this.player.x - Math.sign(dx) * ARCHER.preferredRange,
+                        ARCHER.chaseSpeed, dt);
+                } else if (inRange) {
+                    archer.state = 'aim';
+                    archer.timer = Math.abs(dx) < ARCHER.contactRange ? ARCHER.contactWindup : ARCHER.aimDuration;
                     archer.facing = dx < 0 ? -1 : 1;
                     archer.warning.setVisible(true);
+                } else {
+                    const edge = archer.patrolDirection === 1 ? archer.maxX : archer.minX;
+                    if (this.walk(archer, edge, ARCHER.patrolSpeed, dt)) {
+                        archer.patrolDirection = archer.patrolDirection === 1 ? -1 : 1;
+                        const record = this.records.get(archer.id);
+                        if (record) record.patrolDirection = archer.patrolDirection;
+                    }
                 }
             } else if (archer.state === 'aim') {
                 if (!inRange) { archer.state = 'watch'; archer.warning.setVisible(false); }
                 else if ((archer.timer -= dt) <= 0) {
-                    this.shoot(archer); archer.state = 'reload';
-                    archer.timer = ARCHER.reloadDuration; archer.warning.setVisible(false);
+                    // A telegraphed close-range strike shares arrow damage and shield rules.
+                    const close = Math.abs(this.player.x - archer.sprite.x) <= ARCHER.contactRange &&
+                        Math.abs(this.player.y - archer.sprite.y) <= ARCHER.contactHeight;
+                    if (close) this.onArrowHit(archer.sprite.x >= this.player.x ? 1 : -1);
+                    else this.shoot(archer);
+                    archer.state = 'reload';
+                    archer.timer = ARCHER.reloadDuration;
+                    archer.warning.setVisible(false);
                 }
-            } else if ((archer.timer -= dt) <= 0) archer.state = 'watch';
+            } else {
+                if ((archer.timer -= dt) <= 0) archer.state = 'watch';
+                else if (inRange && Math.abs(dx) > ARCHER.preferredRange + ARCHER.contactWidth) {
+                    this.walk(archer, this.player.x - Math.sign(dx) * ARCHER.preferredRange,
+                        ARCHER.chaseSpeed, dt);
+                }
+            }
+            this.animate(archer, Math.abs(archer.sprite.x - beforeX) > 0.01);
         }
         for (let i = this.arrows.length - 1; i >= 0; i--) {
             const arrow = this.arrows[i], { sprite } = arrow;
