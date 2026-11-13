@@ -20,6 +20,7 @@ import { EnemySystem } from '../systems/EnemySystem';
 import { ArcherSystem } from '../systems/ArcherSystem';
 import { PlatformRewardSystem } from '../systems/PlatformRewardSystem';
 import { CombatSystem } from '../systems/CombatSystem';
+import { HazardSystem } from '../systems/HazardSystem';
 import { isCharacterId, CHARACTERS } from '../characters/definitions';
 import type { CharacterId } from '../characters/definitions';
 import { XpSystem } from '../systems/XpSystem';
@@ -41,6 +42,7 @@ export class Game extends Phaser.Scene {
     private archerSystem!: ArcherSystem;
     private platformRewards!: PlatformRewardSystem;
     private combatSystem!: CombatSystem;
+    private hazardSystem!: HazardSystem;
     private rewardNotice!: RewardNotice;
     private structures!: StructureSystem;
     private healthPickups!: HealthPickupSystem;
@@ -106,6 +108,12 @@ export class Game extends Phaser.Scene {
             (x, y) => this.xpSystem.dropGem(x, y), () => this.endGame(), () => this.updateHud(),
             () => this.rosie.speak('damage'), this.structures, this.archerSystem);
         this.combatSystem.setTerrain(this.world);
+        this.hazardSystem = new HazardSystem(this, this.run, this.groundY,
+            this.player, this.enemySystem, this.archerSystem,
+            amount => this.combatSystem.applyEnvironmentalDamage(amount));
+        this.enemySystem.setImmobilized(id => this.hazardSystem.isEnemyTrapped(id));
+        this.archerSystem.setImmobilized(id => this.hazardSystem.isEnemyTrapped(id));
+        this.hazardSystem.prepare();
 
         this.hud = new Hud(this);
         if (import.meta.env.DEV && WORLD.debugOverlay) {
@@ -270,7 +278,8 @@ export class Game extends Phaser.Scene {
             this.enemySystem.prepare();
             this.archerSystem?.prepare();
             const surfaces = [this.world, this.enemySystem, this.archerSystem];
-            this.player.update(actions, dt,
+            const trappedAtStart = this.hazardSystem.isPlayerTrapped;
+            this.player.update(trappedAtStart ? { left: false, right: false, jump: false } : actions, dt,
                 (from, to, y) => this.archerSystem.resolvePlayerMovement(from,
                     this.enemySystem.resolvePlayerMovement(from, to, y), y),
                 {
@@ -295,7 +304,9 @@ export class Game extends Phaser.Scene {
             this.enemySystem.prepare();
             this.archerSystem?.prepare();
             this.structures.prepare();
-            if (actions.attack) this.combatSystem.attack();
+            this.hazardSystem.update();
+            const consumedAttack = this.hazardSystem.handlePlayerAttack(actions.attack);
+            if (actions.attack && !consumedAttack) this.combatSystem.attack();
             this.combatSystem.update(dt);
             this.enemySystem.update(dt, (enemy) => this.combatSystem.resolveEnemyAttack(enemy));
             this.archerSystem?.update(dt);
