@@ -4,6 +4,7 @@ import { WORLD } from '../config/world';
 import { BALANCE } from '../config/balance';
 import type { Player } from '../entities/Player';
 import { BREAD, hasBreadAnimations } from '../enemies/bread';
+import type { WorldSystem } from '../world/WorldSystem';
 import type { BreadAnimation } from '../enemies/bread';
 import type { RunPhase } from '../state/RunState';
 import type { RunState } from '../state/RunState';
@@ -21,6 +22,9 @@ export class EnemySystem {
     private occupied = new Map<number, Set<string>>();
     private dying = new Set<Enemy>();
     private records = new Map<string, EnemyRecord>();
+    private terrain?: Pick<WorldSystem, 'enemyHeadExposed'>;
+
+    setTerrain(terrain: Pick<WorldSystem, 'enemyHeadExposed'>): void { this.terrain = terrain; }
 
     constructor(private scene: Phaser.Scene, private run: RunState, private groundY: number, private player?: Pick<Player, 'x' | 'y'>) {
         scene.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroy, this);
@@ -32,6 +36,7 @@ export class EnemySystem {
 
     isPlayerStandingOn(enemy: Enemy, playerX: number, playerY: number): boolean {
         return enemy.hp > 0 && enemy.sprite.active &&
+            (!this.terrain || this.terrain.enemyHeadExposed(enemy.sprite.x, enemy.sprite.y)) &&
             Math.abs(playerX - enemy.sprite.x) <= BREAD.standHalfWidth &&
             Math.abs(playerY + BALANCE.player.groundOffset - this.topY(enemy)) < 3;
     }
@@ -41,6 +46,7 @@ export class EnemySystem {
         let landing: number | undefined;
         for (const enemy of this.items) {
             if (enemy.hp <= 0 || !enemy.sprite.active ||
+                (this.terrain && !this.terrain.enemyHeadExposed(enemy.sprite.x, enemy.sprite.y)) ||
                 Math.abs(x - enemy.sprite.x) > BREAD.standHalfWidth) continue;
             const top = this.topY(enemy);
             if (previousFoot <= top + 1 && nextFoot >= top &&
@@ -52,6 +58,7 @@ export class EnemySystem {
     standingY(x: number, foot: number): number | undefined {
         for (const enemy of this.items) {
             if (enemy.hp <= 0 || !enemy.sprite.active ||
+                (this.terrain && !this.terrain.enemyHeadExposed(enemy.sprite.x, enemy.sprite.y)) ||
                 Math.abs(x - enemy.sprite.x) > BREAD.standHalfWidth) continue;
             const top = this.topY(enemy);
             if (Math.abs(foot - top) < 3) return top;

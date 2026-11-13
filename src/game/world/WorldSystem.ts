@@ -4,7 +4,8 @@ import { WORLD } from '../config/world';
 import { BALANCE } from '../config/balance';
 import { generateSection, sectionWindow } from './sections';
 import type { WorldSection } from './sections';
-import { landingSurfaceY, standingSurfaceY } from './terrain';
+import { landingSurfaceY, standingSurfaceY, terrainSegmentImpact, headCoveredByPlatform } from './terrain';
+import type { TerrainImpact } from './terrain';
 import type { TerrainPlatform } from './terrain';
 import type { Landmark } from './landmarks';
 import { terrainTexture, ENVIRONMENT_ASSETS } from './environmentAssets';
@@ -185,6 +186,16 @@ export class WorldSystem {
             result.push(...data.platforms);
         }
         return result;
+    }
+
+    // Terrain determines whether a fireball/strike reaches its target first.
+    terrainImpact(x0: number, y0: number, x1: number, y1: number): TerrainImpact | undefined {
+        return terrainSegmentImpact(this.platformsNear((x0 + x1) / 2),
+            this.groundY, x0, y0, x1, y1);
+    }
+
+    enemyHeadExposed(x: number, enemyBodyY: number): boolean {
+        return !headCoveredByPlatform(this.platformsNear(x), this.groundY, x, enemyBodyY);
     }
 
     landingY(x: number, previousFoot: number, nextFoot: number): number | undefined {

@@ -80,3 +80,30 @@ test('landmarks are deterministic, varied and confined to their section', () => 
     }
     assert.ok(seenKinds.size >= 4, 'Landmark repertoire includes distinct shapes');
 });
+
+
+test('swept fireballs explode on the first ledge or ground crossing', () => {
+    const { terrainSegmentImpact } = moduleExports;
+    const ledge = [{ id: 'shield', x: 400, width: 192, height: 96 }];
+    const ground = 600;
+    const hit = terrainSegmentImpact(ledge, ground, 400, 460, 400, 560);
+    assert.ok(hit);
+    assert.equal(hit.y, 504, 'Projectile hits the top of the ledge');
+    assert.ok(hit.t > 0 && hit.t < 1, 'Collision occurs during the sweep');
+    const bottomHit = terrainSegmentImpact([], ground, 250, 585, 250, 620);
+    assert.ok(bottomHit);
+    assert.equal(bottomHit.y, ground, 'Fireball explodes on the ground');
+    assert.equal(terrainSegmentImpact(ledge, ground, 100, 250, 200, 260), undefined,
+        'Clear shots do not collide');
+});
+
+test('hidden Bread heads beneath ledges are not exposed', () => {
+    const { headCoveredByPlatform } = moduleExports;
+    const ledge = [{ id: 'shield', x: 400, width: 192, height: 96 }];
+    assert.equal(headCoveredByPlatform(ledge, 600, 400, 568), true,
+        'Ground-level Bread is covered by the platform above it');
+    assert.equal(headCoveredByPlatform(ledge, 600, 400, 472), false,
+        'An elevated Pyromancer above the ledge is exposed');
+    assert.equal(headCoveredByPlatform(ledge, 600, 200, 568), false,
+        'An enemy away from the platform is exposed');
+});

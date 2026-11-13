@@ -6,6 +6,7 @@ import type { RunState, RunPhase } from '../state/RunState';
 import type { Player } from '../entities/Player';
 import type { EnemySystem, Enemy } from './EnemySystem';
 import type { ArcherSystem, Archer } from './ArcherSystem';
+import type { WorldSystem } from '../world/WorldSystem';
 import type { StructureSystem, Crate } from './StructureSystem';
 import { WEAPONS } from '../weapons/definitions';
 import { SWORD_SLASH_EFFECT, hasSwordSlashEffect } from '../weapons/slashEffect';
@@ -18,6 +19,9 @@ export class CombatSystem {
     private timers = new Set<Phaser.Time.TimerEvent>();
     private tweens = new Set<Phaser.Tweens.Tween>();
     private slashes = new Set<Phaser.GameObjects.Container | Phaser.GameObjects.Sprite>();
+    private terrain?: Pick<WorldSystem, 'terrainImpact'>;
+
+    setTerrain(terrain: Pick<WorldSystem, 'terrainImpact'>): void { this.terrain = terrain; }
 
     constructor(
         private scene: Phaser.Scene, private run: RunState, private player: Player,
@@ -30,6 +34,9 @@ export class CombatSystem {
     resolveEnemyAttack(enemy: Enemy): boolean {
         if (this.run.phase !== 'playing' || enemy.hp <= 0 || enemy.brain.state !== 'active' || enemy.brain.remaining <= 0) return false;
         const standingOnHead = this.enemySystem.isPlayerStandingOn(enemy, this.player.x, this.player.y);
+        // Solid ledges block melee even if the centre-distance test says hit.
+        if (this.terrain?.terrainImpact(enemy.sprite.x, enemy.sprite.y - 12,
+            this.player.x, this.player.y)) return false;
         const dx = (this.player.x - enemy.sprite.x) * enemy.brain.facing;
         if (!standingOnHead && (dx < 0 || dx > BREAD.attackRange ||
             Math.abs(enemy.sprite.y - this.player.y) > BREAD.attackHeight)) return false;

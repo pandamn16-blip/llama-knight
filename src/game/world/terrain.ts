@@ -68,3 +68,46 @@ export function standingSurfaceY(platforms: readonly TerrainPlatform[], groundY:
     }
     return Math.abs(currentFoot - groundY) < 2 ? groundY : undefined;
 }
+
+
+// Solid collision for projectiles: an elevated ledge occupies its rendered
+// 24px-thick slab, while the continuous ground extends below groundY.
+// Returns first hit along a movement segment (t in [0, 1]), avoiding tunnelling.
+export type TerrainImpact = { x: number; y: number; t: number };
+export function terrainSegmentImpact(platforms: readonly TerrainPlatform[], groundY: number,
+    x0: number, y0: number, x1: number, y1: number): TerrainImpact | undefined {
+    const dx = x1 - x0, dy = y1 - y0;
+    let closest = Infinity;
+    const slab = (minX: number, maxX: number, minY: number, maxY: number): void => {
+        let enter = 0, leave = 1;
+        for (const [position, delta, min, max] of [
+            [x0, dx, minX, maxX], [y0, dy, minY, maxY]
+        ]) {
+            if (Math.abs(delta) < 1e-9) {
+                if (position < min || position > max) return;
+            } else {
+                const a = (min - position) / delta, b = (max - position) / delta;
+                enter = Math.max(enter, Math.min(a, b));
+                leave = Math.min(leave, Math.max(a, b));
+                if (enter > leave) return;
+            }
+        }
+        closest = Math.min(closest, enter);
+    };
+    for (const platform of platforms) {
+        const top = platformTop(groundY, platform);
+        slab(platform.x - platform.width / 2, platform.x + platform.width / 2,
+            top, top + 24);
+    }
+    // Ground is solid even for horizontal shots that begin slightly below it.
+    slab(-Infinity, Infinity, groundY, Infinity);
+    return Number.isFinite(closest) ? {
+        x: x0 + dx * closest, y: y0 + dy * closest, t: closest
+    } : undefined;
+}
+
+export function headCoveredByPlatform(platforms: readonly TerrainPlatform[],
+    groundY: number, x: number, enemyBodyY: number): boolean {
+    return platforms.some(platform => covers(platform, x) &&
+        platformTop(groundY, platform) < enemyBodyY);
+}

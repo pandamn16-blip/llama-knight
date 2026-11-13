@@ -12,6 +12,7 @@ import type { RunPhase } from '../state/RunState';
 import { generateSection, sectionWindow } from '../world/sections';
 import type { RunState } from '../state/RunState';
 import type { Player } from '../entities/Player';
+import type { WorldSystem } from '../world/WorldSystem';
 
 export type Archer = {
     kind: 'archer';
@@ -44,6 +45,11 @@ export class ArcherSystem {
     private arrows: Arrow[] = [];
     private dying: Dying[] = [];
     private hitFlashTimers = new Map<string, Time.TimerEvent>();
+    private terrain?: Pick<WorldSystem, 'terrainImpact' | 'enemyHeadExposed'>;
+
+    setTerrain(terrain: Pick<WorldSystem, 'terrainImpact' | 'enemyHeadExposed'>): void {
+        this.terrain = terrain;
+    }
 
     constructor(private scene: Scene, private run: RunState,
         private groundY: number, private player: Pick<Player, 'x' | 'y'>,
@@ -57,6 +63,7 @@ export class ArcherSystem {
 
     isPlayerStandingOn(archer: Archer, playerX: number, playerY: number): boolean {
         return archer.hp > 0 && archer.sprite.active &&
+            (!this.terrain || this.terrain.enemyHeadExposed(archer.sprite.x, archer.sprite.y)) &&
             Math.abs(playerX - archer.sprite.x) <= ARCHER.standHalfWidth &&
             Math.abs(playerY + BALANCE.player.groundOffset - this.topY(archer)) < 3;
     }
@@ -71,6 +78,7 @@ export class ArcherSystem {
         let landing: number | undefined;
         for (const archer of this.active.values()) {
             if (archer.hp <= 0 || !archer.sprite.active ||
+                (this.terrain && !this.terrain.enemyHeadExposed(archer.sprite.x, archer.sprite.y)) ||
                 Math.abs(x - archer.sprite.x) > ARCHER.standHalfWidth) continue;
             const top = this.topY(archer);
             if (previousFoot <= top + 1 && nextFoot >= top &&
@@ -82,6 +90,7 @@ export class ArcherSystem {
     standingY(x: number, foot: number): number | undefined {
         for (const archer of this.active.values()) {
             if (archer.hp <= 0 || !archer.sprite.active ||
+                (this.terrain && !this.terrain.enemyHeadExposed(archer.sprite.x, archer.sprite.y)) ||
                 Math.abs(x - archer.sprite.x) > ARCHER.standHalfWidth) continue;
             const top = this.topY(archer);
             if (Math.abs(foot - top) < 3) return top;
@@ -317,8 +326,12 @@ export class ArcherSystem {
                     const close = Math.abs(this.player.x - archer.sprite.x) <= ARCHER.contactRange &&
                         Math.abs(this.player.y - archer.sprite.y) <= ARCHER.contactHeight;
                     if (archer.attackKind === 'bonk') {
-                        // An escaped bonk misses; never turn a melee animation into a projectile.
-                        if (close) this.onArrowHit(archer.sprite.x >= this.player.x ? 1 : -1);
+                        // An escaped bonk misses; solid terrain also prevents a
+                        // strike from travelling through an overhead ledge.
+                        const shieldedByTerrain = this.terrain?.terrainImpact(
+                            archer.sprite.x, archer.sprite.y - 20, this.player.x, this.player.y);
+                        if (close && !shieldedByTerrain)
+                            this.onArrowHit(archer.sprite.x >= this.player.x ? 1 : -1);
                     } else this.shoot(archer);
                     archer.state = 'reload';
                     archer.timer = ARCHER.reloadDuration;
@@ -355,14 +368,18 @@ export class ArcherSystem {
             const vx = toX - fromX, vy = toY - fromY;
             const t = Math.max(0, Math.min(1, ((this.player.x - fromX) * vx +
                 (this.player.y - fromY) * vy) / (vx * vx + vy * vy || 1)));
-            const hit = Math.hypot(fromX + vx * t - this.player.x,
+            const playerHit = Math.hypot(fromX + vx * t - this.player.x,
                 fromY + vy * t - this.player.y) < ARCHER.arrowHitRadius;
+            const terrainHit = this.terrain?.terrainImpact(fromX, fromY, toX, toY);
+            // First collision in the swept segment wins. A ledge absorbs a
+            // fireball before it can damage someone standing behind it.
+            const hitsTerrain = !!terrainHit && (!playerHit || terrainHit.t <= t);
+            const hitPlayer = playerHit && !hitsTerrain;
             arrow.distance += distance;
-            if (hit) {
-                // Stop at the actual swept contact point. Frame 5 is exclusively
-                // the hit effect; frame 3 remains displayed during flight.
-                sprite.x = fromX + vx * t;
-                sprite.y = fromY + vy * t;
+            if (hitPlayer || hitsTerrain) {
+                const contactT = hitsTerrain ? terrainHit!.t : t;
+                sprite.x = fromX + vx * contactT;
+                sprite.y = fromY + vy * contactT;
                 if ('setFrame' in sprite && hasPyromancerFireball(this.scene)) {
                     sprite.anims.stop();
                     sprite.setFrame(PYROMANCER_FIREBALL.impactFrame);
@@ -371,7 +388,7 @@ export class ArcherSystem {
                     sprite.destroy();
                     this.arrows.splice(i, 1);
                 }
-                this.onArrowHit(arrow.vx >= 0 ? -1 : 1);
+                if (hitPlayer) this.onArrowHit(arrow.vx >= 0 ? -1 : 1);
             } else {
                 sprite.x = toX; sprite.y = toY;
                 if (arrow.distance >= ARCHER.projectileRange ||

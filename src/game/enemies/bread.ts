@@ -8,14 +8,15 @@ export const BREAD = {
     loseRange: 400, territoryLeash: 780, returnSpeed: 60,
     meleeStop: 60, attackRange: 82, attackHeight: 52,
     windup: 0.35, active: 0.1, recovery: 0.9, animationLead: 0.2,
-    activationMargin: 160, deathDuration: 0.5,
-    standHeight: 65, standHalfWidth: 34,
+    activationMargin: 160, deathDuration: 1.0,
+    // Head landing sits on the drawn loaf, not above the full 256px canvas.
+    standHeight: 36, standHalfWidth: 30,
     scale: 0.36, originX: 0.5, originY: 0.875, offsetX: 0, offsetY: 32
 } as const;
 
 export const BREAD_ANIMATIONS = {
     idle: { fps: 5, repeat: -1 }, run: { fps: 8, repeat: -1 },
-    attack: { fps: 10, repeat: 0 }, death: { fps: 8, repeat: 0 }
+    attack: { fps: 10, repeat: 0 }, death: { fps: 4, repeat: 0 }
 } as const;
 export type BreadAnimation = keyof typeof BREAD_ANIMATIONS;
 export const breadSheet = (state: BreadAnimation) => ({
