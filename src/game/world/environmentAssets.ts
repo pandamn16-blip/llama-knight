@@ -11,6 +11,14 @@ export const ENVIRONMENT_ASSETS = {
             platformMiddle: { key: 'breadlands:platform-middle', path: 'environments/breadlands/terrain/platform-middle.png', enabled: false },
             platformRight: { key: 'breadlands:platform-right', path: 'environments/breadlands/terrain/platform-right.png', enabled: false }
         },
+        decorations: {
+            arch: { key: 'breadlands:arch', path: 'environments/breadlands/decorations/arch.png', enabled: false },
+            watchtower: { key: 'breadlands:watchtower', path: 'environments/breadlands/decorations/watchtower.png', enabled: false },
+            ruins: { key: 'breadlands:ruins', path: 'environments/breadlands/decorations/ruins.png', enabled: false },
+            fence: { key: 'breadlands:fence', path: 'environments/breadlands/decorations/fence.png', enabled: false },
+            boulders: { key: 'breadlands:boulders', path: 'environments/breadlands/decorations/boulders.png', enabled: false },
+            sign: { key: 'breadlands:sign', path: 'environments/breadlands/decorations/sign.png', enabled: false }
+        },
         backgrounds: {
             sky: { key: 'breadlands:sky', path: 'environments/breadlands/backgrounds/sky.png', enabled: false, scrollFactor: 0 },
             hills: { key: 'breadlands:hills', path: 'environments/breadlands/backgrounds/distant-hills.png', enabled: false, scrollFactor: 0.18 }
@@ -20,7 +28,7 @@ export const ENVIRONMENT_ASSETS = {
 
 export function loadEnvironmentArt(scene: Scene): void {
     const group = ENVIRONMENT_ASSETS.breadlands;
-    for (const entry of [...Object.values(group.terrain), ...Object.values(group.backgrounds)]) {
+    for (const entry of [...Object.values(group.terrain), ...Object.values(group.decorations), ...Object.values(group.backgrounds)]) {
         if (entry.enabled) scene.load.image(entry.key, entry.path);
     }
 }
