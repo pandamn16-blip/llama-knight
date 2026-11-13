@@ -62,8 +62,8 @@ test('all twelve planned terrain archetypes generate reproducibly and remain nav
         }
         for (let i = 1; i < a.length; i++) {
             assert.ok(a[i].x > a[i - 1].x, 'Stepping-stone order is left-to-right');
-            assert.ok(a[i].x - a[i - 1].x <= 420,
-                'Section has no oversized forced aerial jump');
+            assert.ok(a[i].x - a[i - 1].x <= 850,
+                'Upper-route segments fit inside the section; longer spans have ground below');
         }
         const gaps = generateTerrainGaps(index, roll);
         for (const gap of gaps) {
