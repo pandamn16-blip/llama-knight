@@ -2479,7 +2479,7 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     assert.equal(PYROMANCER_IDLE.originY, 224 / 256);
     const requests = [];
     loadPyromancerIdle({ load: { spritesheet: (...params) => requests.push(params) } });
-    assert.equal(requests.length, 2, 'Both idle and run spritesheets load');
+    assert.equal(requests.length, 6, 'All six Pyromancer sheets load');
     assert.equal(requests[0][0], PYROMANCER_IDLE.key);
     assert.equal(requests[0][1], PYROMANCER_IDLE.path);
     assert.equal(requests[0][2].endFrame, 5);
@@ -2492,8 +2492,34 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     assert.equal(PYROMANCER_RUN.scale, PYROMANCER_IDLE.scale);
     assert.equal(PYROMANCER_RUN.originY, PYROMANCER_IDLE.originY);
     assert.equal(typeof hasPyromancerRun, 'function');
-    assert.equal(requests.length, 2, 'Both idle and run sheets are loaded');
+    assert.equal(requests.length, 6, 'All six Pyromancer sheets are loaded');
     assert.equal(requests[1][0], PYROMANCER_RUN.key);
     assert.equal(requests[1][2].endFrame, 5);
     console.log('PASS pancake animations: idle/run sheets, transparent RGBA frames, matching anchors.');
+}
+
+// Pyromancer animation source contracts: six original RGBA strips,
+// two non-looping attacks, a non-looping death and one-shot projectile.
+// The projectile's final frame remains displayed after its animation ends;
+// the gameplay system, not the animation, destroys it on collision.
+{
+    const pyro = load('enemies/pyromancer');
+    const states = ['ATTACK', 'BONK', 'DEATH', 'FIREBALL'];
+    for (const state of states) {
+        const spec = pyro['PYROMANCER_' + state];
+        assert.ok(spec, state + ' animation registered');
+        const bytes = fs.readFileSync(path.join(__dirname, '../public/assets', spec.path));
+        assert.equal(bytes.subarray(1, 4).toString('ascii'), 'PNG', state + ' is PNG');
+        assert.equal(bytes.readUInt32BE(16), 1536, state + ' is six frames wide');
+        assert.equal(bytes.readUInt32BE(20), 256, state + ' frame height');
+        assert.equal(bytes[25], 6, state + ' supports transparency');
+        assert.equal(spec.start, 0);
+        assert.equal(spec.end, 5);
+        assert.equal(spec.repeat, 0, state + ' plays once, never loops');
+        assert.equal(spec.originY, 224 / 256);
+    }
+    assert.equal(pyro.PYROMANCER_ATTACK.scale, pyro.PYROMANCER_IDLE.scale);
+    assert.equal(pyro.PYROMANCER_BONK.scale, pyro.PYROMANCER_IDLE.scale);
+    assert.equal(pyro.PYROMANCER_DEATH.scale, pyro.PYROMANCER_IDLE.scale);
+    console.log('PASS Pyromancer combat: original attack/bonk/death/fireball sheets and animation contracts.');
 }
