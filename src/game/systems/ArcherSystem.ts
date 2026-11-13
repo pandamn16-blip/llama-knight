@@ -94,7 +94,7 @@ export class ArcherSystem {
             archer.sprite.y - 8).setDepth(7).setScrollFactor(1);
         sprite.add([
             this.scene.add.rectangle(0, 0, 29, 5, 0x715030).setAngle(Math.atan2(vy, vx) * 180 / Math.PI),
-            this.scene.add.triangle(0, 0, 13, -6, 13, 6, 23, 0, 0xffe0a1).setAngle(Math.atan2(vy, vx) * 180 / Math.PI)
+            this.scene.add.rectangle(13, 0, 10, 8, 0xffe0a1).setAngle(Math.atan2(vy, vx) * 180 / Math.PI)
         ]);
         this.arrows.push({ sprite, vx, vy, distance: 0 });
     }
