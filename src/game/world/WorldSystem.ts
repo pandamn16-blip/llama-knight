@@ -73,14 +73,21 @@ export class WorldSystem {
         objects.push(this.scene.add.rectangle(centre, this.groundY + (height - this.groundY) / 2,
             WORLD.sectionLength, height - this.groundY, 0x65865b).setDepth(1));
         const tile = WORLD.terrainTileSize;
-        for (let x = data.startX + tile / 2; x < data.endX; x += tile) {
-            objects.push(this.tile(x, this.groundY + tile / 2, tile, tile,
-                'breadlands:ground-top', 0x52744a, 2));
-            // Ground fill artwork can be introduced without changing the collision.
-            if (terrainTexture(this.scene, 'breadlands:ground-fill')) {
+        // Keep placeholder rendering lightweight: one strip per section, not 40
+        // separate rectangles. Actual authored tiles are only created when enabled.
+        if (!terrainTexture(this.scene, 'breadlands:ground-top')) {
+            objects.push(this.scene.add.rectangle(centre, this.groundY + 5,
+                WORLD.sectionLength, 10, 0x425b3c).setDepth(2));
+        } else {
+            for (let x = data.startX + tile / 2; x < data.endX; x += tile) {
+                objects.push(this.tile(x, this.groundY + tile / 2, tile, tile,
+                    'breadlands:ground-top', 0x52744a, 2));
+            }
+        }
+        if (terrainTexture(this.scene, 'breadlands:ground-fill')) {
+            for (let x = data.startX + tile / 2; x < data.endX; x += tile)
                 for (let y = this.groundY + tile * 1.5; y < height + tile / 2; y += tile)
                     objects.push(this.tile(x, y, tile, tile, 'breadlands:ground-fill', 0x65865b, 1));
-            }
         }
         for (const platform of data.platforms) objects.push(...this.drawPlatform(platform));
         return { data, objects, scenery };
