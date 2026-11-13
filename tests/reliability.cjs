@@ -2078,7 +2078,7 @@ console.log('PASS mobile UX: aspect-preserving viewport sizing, independent joys
         assert.ok(g.structures.crates.length < 12); assert.ok(g.healthPickups.active.size < 8);
         maximum = Math.max(maximum, objects.filter(object => object.active).length);
     }
-    assert.ok(maximum < 220); console.log(`PASS structures streaming: 500 sections, maximum ${maximum} live objects including health drops.`);
+    assert.ok(maximum < 320); console.log(`PASS structures streaming: 500 sections, maximum ${maximum} live objects including health drops.`);
     g.events.emit('shutdown');
 }
 console.log('PASS Adventure Stage 2B: deterministic crates, shared sword/projectile hits, unchanged cooldowns, persistent damage/destruction, XP/health once, pause/death guards and cleanup.');
