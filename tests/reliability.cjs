@@ -1814,7 +1814,8 @@ console.log('PASS endless foundation: seeded sections, unbounded forward movemen
         }
         const terrainKeys = terrain.map(object => `${object.args[2]}:${object.x}:${object.y}`);
         assert.equal(new Set(terrainKeys).size, terrain.length);
-        const terrainColours = [0x8195a7, 0x65865b, 0x425b3c];
+        // Include the optional ledge body and edge colours in active-terrain accounting.
+        const terrainColours = [0x8195a7, 0x65865b, 0x425b3c, 0x95734f, 0x86b35b];
         const activeTerrain = objects.filter(object => object.active && object.kind === 'rectangle' && terrainColours.includes(object.args[2]));
         assert.equal(activeTerrain.length, terrain.length, 'No live orphan terrain after unload/reload');
         const enemies = g.enemySystem.enemies;
