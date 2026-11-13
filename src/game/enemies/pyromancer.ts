@@ -52,7 +52,7 @@ const sheets = [PYROMANCER_IDLE, PYROMANCER_RUN, PYROMANCER_ATTACK,
 export function loadPyromancerIdle(scene: Scene): void {
     for (const sheet of sheets) {
         scene.load.spritesheet(sheet.key, sheet.path,
-            { frameWidth: 256, frameHeight: 256, startFrame: sheet.start, endFrame: sheet.end });
+            { frameWidth: 256, frameHeight: 256, startFrame: sheet.start, endFrame: 5 });
     }
 }
 
