@@ -2621,3 +2621,32 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     archers.destroy(); g.events.emit('shutdown');
     console.log('PASS Pyromancer game combat: casting, persistent fireball, bonk without shot and death animation.');
 }
+
+
+// Doubling range must affect actual casting, not just projectile lifetime.
+// Platform-bound Pyromancers must not stall at the ledge waiting to get closer.
+{
+    const { game: g } = fixture();
+    const { ArcherSystem } = load('systems/ArcherSystem');
+    const { ARCHER } = load('config/archers');
+    assert.equal(ARCHER.detectionRange, 900);
+    assert.equal(ARCHER.projectileRange, 1400);
+    assert.equal(ARCHER.preferredRange, 300);
+    const sys = new ArcherSystem(g, g.run, g.groundY, g.player, () => {}, () => {});
+    const perch = generateSection(1, g.run.seed).platforms[3];
+    g.cameras.main.setScroll(perch.x - 700, 0);
+    g.player.y = g.groundY - perch.height - ARCHER.footOffset;
+    g.player.x = perch.x - 800;
+    sys.prepare();
+    const pyro = sys.archers[0];
+    assert.ok(pyro);
+    sys.update(0.02);
+    assert.equal(pyro.state, 'aim', 'Pyromancer aims at a target 800px away without chasing');
+    assert.equal(pyro.sprite.x, perch.x, 'Aiming at range does not move off the ledge');
+    sys.update(ARCHER.aimDuration + 0.01);
+    assert.equal(pyro.state, 'reload', 'Distant Pyromancer actually releases a shot');
+    assert.ok(sys.arrows.length > 0, 'Shot exists while travelling across long range');
+    sys.destroy();
+    g.events.emit('shutdown');
+    console.log('PASS Pyromancer doubled range: 900px detection and 1400px projectile, distant casting.');
+}
