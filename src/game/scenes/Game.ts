@@ -282,6 +282,12 @@ export class Game extends Phaser.Scene {
                     standingY: (x, foot) => surfaces.map(surface => surface.standingY(x, foot))
                         .find(value => value !== undefined)
                 });
+            // A missed pit jump is a genuine fall, not an endless descent.
+            // No fall hazard exists in the introductory section.
+            if (this.player.y > this.scale.height + 90) {
+                this.endGame();
+                break;
+            }
             this.run.furthestX = Math.max(this.run.furthestX, this.player.x);
             this.run.distance = Math.max(0, this.run.furthestX - this.run.startX) / WORLD.pixelsPerMetre;
             this.worldCamera.update(this.player.x, dt);
