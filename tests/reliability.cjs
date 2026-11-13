@@ -389,7 +389,7 @@ console.log('PASS Step C: independent simultaneous fingers, per-pointer release/
 console.log('PASS browser host configuration: fixed coordinates, FIT scaling, four touch pointers and resize-observer cleanup.');
 
 // Every Phaser scene loader inherits Vite's deployment base, including public assets.
-for (const base of ['./', '/llama-knight/']) {
+for (const base of ['./', '/llamaknight/']) {
     const engine = load('main', base).default('game-container');
     assert.equal(engine.config.loader.baseURL, base);
     const { Boot } = load('scenes/Boot', base);
@@ -403,8 +403,8 @@ for (const base of ['./', '/llama-knight/']) {
     };
     const boot = new Boot(); boot.load = loader; boot.preload();
     const preloader = new Preloader(); preloader.load = loader; preloader.preload();
-    const origin = 'https://pandamn16-blip.github.io/';
-    const expected = base === './' ? '/assets/' : '/llama-knight/assets/';
+    const origin = 'https://ianswebsolutions.com/';
+    const expected = base === './' ? '/assets/' : '/llamaknight/assets/';
     assert.ok(requests.length >= 7);
     for (const request of requests) {
         const url = new URL(request.url, origin);

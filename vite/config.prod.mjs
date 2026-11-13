@@ -17,7 +17,7 @@ const phasermsg = () => {
 }   
 
 export default defineConfig({
-    base: '/llama-knight/',
+    base: '/llamaknight/',
     logLevel: 'warning',
     build: {
         rollupOptions: {
