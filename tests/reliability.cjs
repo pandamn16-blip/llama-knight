@@ -2189,7 +2189,7 @@ console.log('PASS Stage 2C: deterministic early/later chests, contextual tap/E i
     assert.equal(restored.sprite.x, x); assert.equal(restored.hp, 5); assert.equal(JSON.stringify(restored.brain), brain);
     assert.equal(g.enemySystem.damage(restored, 5), true); assert.equal(g.enemySystem.damage(restored, 5), false);
     assert.ok(!g.enemySystem.enemies.includes(restored)); assert.equal(restored.sprite.active, true);
-    g.enemySystem.update(BREAD.deathDuration + 0.01, () => false);
+    g.enemySystem.update(load('enemies/bread').BREAD.deathDuration + 0.01, () => false);
     assert.equal(restored.sprite.active, false);
     assert.equal(g.enemySystem.spawnBread(2500, id), undefined);
     g.events.emit('shutdown'); assert.equal(g.enemySystem.occupied.size, 0);
