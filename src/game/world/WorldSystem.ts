@@ -12,7 +12,7 @@ import { terrainTexture, ENVIRONMENT_ASSETS } from './environmentAssets';
 type SectionVisuals = {
     data: WorldSection;
     objects: GameObjects.GameObject[];
-    scenery: GameObjects.Rectangle[];
+    scenery: GameObjects.Ellipse[];
 };
 
 // Deterministic geometry is separate from optional terrain textures. The ground
@@ -138,8 +138,17 @@ export class WorldSystem {
 
     private drawSection(data: WorldSection): SectionVisuals {
         const objects: GameObjects.GameObject[] = [];
-        const scenery = data.sceneryXs.map(x => this.scene.add.rectangle(x, this.groundY - 115,
-            95, 205, 0x8195a7, 0.48).setDepth(0).setScrollFactor(1));
+        // Irregular soft distant hills replace the former repeating rectangle
+        // columns. These are scenery only: no terrain collisions.
+        const scenery = data.sceneryXs.map(x => {
+            const variation = (Math.imul(Math.floor(x / BALANCE.scenery.spacing) + 1, 1103515245)
+                ^ data.seed) >>> 0;
+            const width = 170 + (variation % 120);
+            const height = 110 + ((variation >>> 8) % 100);
+            const colour = variation & 1 ? 0x8fa6a2 : 0x9ab1a3;
+            return this.scene.add.ellipse(x, this.groundY - height / 2 + 10,
+                width, height, colour, 0.3).setDepth(0).setScrollFactor(1);
+        });
         objects.push(...scenery);
         const height = this.scene.scale.height;
         const centre = (data.startX + data.endX) / 2;
