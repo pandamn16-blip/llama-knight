@@ -26,5 +26,5 @@ export function loadEnvironmentArt(scene: Scene): void {
 }
 
 export function terrainTexture(scene: Scene, key: string): boolean {
-    return scene.textures.exists(key);
+    return scene.textures?.exists(key) === true;
 }
