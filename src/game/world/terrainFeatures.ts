@@ -44,3 +44,25 @@ export function generateBreakableWalls(index: number, seed: number, gaps: readon
     }
     return [];
 }
+
+// Swept segment against a solid rectangle; returned t is the first contact.
+// Shared by fireballs and player projectiles to prevent tunnelling through walls.
+export function segmentWallImpact(x0: number, y0: number, x1: number, y1: number,
+    wall: BreakableWall, groundY: number): number | undefined {
+    const dx = x1 - x0, dy = y1 - y0;
+    let enter = 0, leave = 1;
+    for (const [pos, delta, min, max] of [
+        [x0, dx, wall.x - wall.width / 2, wall.x + wall.width / 2],
+        [y0, dy, groundY - wall.height, groundY]
+    ]) {
+        if (Math.abs(delta) < 1e-9) {
+            if (pos < min || pos > max) return undefined;
+        } else {
+            const a = (min - pos) / delta, b = (max - pos) / delta;
+            enter = Math.max(enter, Math.min(a, b));
+            leave = Math.min(leave, Math.max(a, b));
+            if (enter > leave) return undefined;
+        }
+    }
+    return enter;
+}
