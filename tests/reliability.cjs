@@ -2367,3 +2367,63 @@ console.log('PASS Bread body collision: both characters, both directions, swept 
     g.events.emit('shutdown');
 }
 console.log('PASS stationary shield: no horizontal movement or jumping, immediate release, airborne gravity and unchanged Candy controls.');
+
+
+// Elevated rewards are deterministic, collected once, and remain claimed after streaming.
+{
+    const { game: g } = fixture();
+    const { PlatformRewardSystem } = load('systems/PlatformRewardSystem');
+    const rewards = new PlatformRewardSystem(g, g.run, g.player, g.groundY, xp => g.xpSystem.award(xp));
+    const platforms = generateSection(0, g.run.seed).platforms;
+    assert.equal(platforms.length, 4);
+    assert.ok(platforms[1].x - platforms[0].x < 350, 'Paired ledges make a connected upper route');
+    g.cameras.main.setScroll(700, 0);
+    rewards.prepare();
+    const prize = [...rewards.active.values()].find(entry => entry.sprite.x === platforms[2].x);
+    assert.ok(prize, 'An upper route has an XP reward');
+    g.player.x = prize.sprite.x; g.player.y = prize.sprite.y;
+    rewards.update();
+    assert.equal(g.run.xp, 1);
+    g.cameras.main.setScroll(10000, 0); rewards.prepare();
+    g.cameras.main.setScroll(700, 0); rewards.prepare();
+    assert.ok(![...rewards.active.values()].some(entry => entry.sprite.x === platforms[2].x));
+    assert.equal(g.run.xp, 1);
+    const chest = generateSection(1, g.run.seed).structures.find(item => item.kind === 'chest' && item.elevation);
+    assert.ok(chest && chest.elevation === generateSection(1, g.run.seed).platforms[1].height);
+    rewards.destroy(); g.events.emit('shutdown');
+    console.log('PASS elevated rewards: repeatable ledges, collectible XP and persistent once-per-run prizes.');
+}
+
+// Bread Archers aim before firing, shoot in the correct direction and remain
+// defeated even when the camera streams the section out and back.
+{
+    const { game: g } = fixture();
+    const { ArcherSystem } = load('systems/ArcherSystem');
+    const hits = [], kills = [];
+    const archers = new ArcherSystem(g, g.run, g.groundY, g.player,
+        direction => hits.push(direction), (x, y) => kills.push([x, y]));
+    const perch = generateSection(1, g.run.seed).platforms[3];
+    g.cameras.main.setScroll(perch.x - 700, 0);
+    g.player.x = perch.x - 165;
+    g.player.y = g.groundY - perch.height - 32;
+    archers.prepare();
+    assert.equal(archers.archers.length, 1);
+    const archer = archers.archers[0];
+    archers.update(0.02);
+    assert.equal(archer.state, 'aim');
+    assert.equal(archer.warning.visible, true);
+    archers.update(0.75);
+    assert.equal(archer.state, 'reload');
+    assert.equal(archer.warning.visible, false);
+    for (let step = 0; step < 8; step++) archers.update(0.1);
+    assert.equal(hits.length, 1);
+    assert.equal(hits[0], 1, 'Shot approaches player from their right');
+    assert.equal(archers.damage(archer, 2), false);
+    assert.equal(archers.damage(archer, 2), true);
+    assert.equal(kills.length, 1);
+    g.cameras.main.setScroll(14000, 0); archers.prepare();
+    g.cameras.main.setScroll(perch.x - 700, 0); archers.prepare();
+    assert.equal(archers.archers.length, 0, 'Dead archer does not respawn on return');
+    archers.destroy(); g.events.emit('shutdown');
+    console.log('PASS Bread Archers: spawn, aiming tell, projectile, combat damage and persistent death.');
+}
