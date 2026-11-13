@@ -2,6 +2,8 @@ import { Scenes } from 'phaser';
 import type { Scene, GameObjects } from 'phaser';
 import { WORLD } from '../config/world';
 import { ARCHER } from '../config/archers';
+import { hasPyromancerIdle, PYROMANCER_IDLE } from '../enemies/pyromancer';
+import type { RunPhase } from '../state/RunState';
 import { generateSection, sectionWindow } from '../world/sections';
 import type { RunState } from '../state/RunState';
 import type { Player } from '../entities/Player';
@@ -16,6 +18,7 @@ export type Archer = {
     timer: number;
     facing: -1 | 1;
     warning: GameObjects.Text;
+    art?: GameObjects.Sprite;
 };
 type ArcherRecord = { hp: number; dead: boolean };
 type Arrow = { sprite: GameObjects.Container; vx: number; vy: number; distance: number };
@@ -55,19 +58,31 @@ export class ArcherSystem {
             this.records.set(id, record);
             const sprite = this.scene.add.container(perch.x, this.groundY - perch.height - ARCHER.footOffset)
                 .setDepth(6).setScrollFactor(1);
-            sprite.add([
-                this.scene.add.ellipse(0, 0, 54, 58, 0xc98d50).setStrokeStyle(3, 0x5e3d27),
-                this.scene.add.rectangle(0, -24, 53, 13, 0x66855b),
-                this.scene.add.circle(-10, -5, 3, 0x33271f),
-                this.scene.add.circle(10, -5, 3, 0x33271f),
-                this.scene.add.rectangle(30, 0, 4, 42, 0x78512d)
-            ]);
+            // The approved pancake pyromancer is the Archer's temporary visual skin.
+            // Collision, attack timing and projectile behaviour stay unchanged.
+            let art: GameObjects.Sprite | undefined;
+            if (hasPyromancerIdle(this.scene)) {
+                art = this.scene.add.sprite(0, ARCHER.footOffset,
+                    PYROMANCER_IDLE.key, PYROMANCER_IDLE.start)
+                    .setOrigin(PYROMANCER_IDLE.originX, PYROMANCER_IDLE.originY)
+                    .setScale(PYROMANCER_IDLE.scale);
+                sprite.add(art);
+                art.play(PYROMANCER_IDLE.animationKey);
+            } else {
+                sprite.add([
+                    this.scene.add.ellipse(0, 0, 54, 58, 0xc98d50).setStrokeStyle(3, 0x5e3d27),
+                    this.scene.add.rectangle(0, -24, 53, 13, 0x66855b),
+                    this.scene.add.circle(-10, -5, 3, 0x33271f),
+                    this.scene.add.circle(10, -5, 3, 0x33271f),
+                    this.scene.add.rectangle(30, 0, 4, 42, 0x78512d)
+                ]);
+            }
             const warning = this.scene.add.text(0, -55, '!', {
                 fontSize: '26px', color: '#ffe4a0', backgroundColor: '#a54f33'
             }).setOrigin(0.5).setVisible(false);
             sprite.add(warning);
             this.active.set(id, { kind: 'archer', id, sprite, hp: record.hp, maxHealth: ARCHER.hp,
-                state: 'watch', timer: 0, facing: -1, warning });
+                state: 'watch', timer: 0, facing: -1, warning, art });
         }
     }
 
@@ -108,7 +123,9 @@ export class ArcherSystem {
             const visible = archer.sprite.x >= camera.scrollX - ARCHER.activationMargin &&
                 archer.sprite.x <= camera.scrollX + camera.width + ARCHER.activationMargin;
             archer.sprite.setVisible(visible);
-            if (!visible) continue;
+            if (!visible) { archer.art?.anims.pause(); continue; }
+            if (this.run.phase === 'playing') archer.art?.anims.resume();
+            archer.art?.setFlipX(archer.facing === -1);
             const inRange = Math.abs(dx) < ARCHER.detectionRange &&
                 Math.abs(this.player.y - archer.sprite.y) < ARCHER.detectionHeight;
             if (archer.state === 'watch') {
@@ -144,6 +161,13 @@ export class ArcherSystem {
                 sprite.destroy(); this.arrows.splice(i, 1);
             }
             if (this.run.phase !== 'playing') break;
+        }
+    }
+
+    setPhase(phase: RunPhase): void {
+        for (const archer of this.active.values()) {
+            if (phase === 'playing') archer.art?.anims.resume();
+            else archer.art?.anims.pause();
         }
     }
 
