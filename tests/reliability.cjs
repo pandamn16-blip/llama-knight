@@ -2914,3 +2914,58 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     assert.equal(hazards.active.size, 0, 'Hazards clean up at scene shutdown');
     console.log('PASS Phase 1 hazards: three presses, trapped movement state, player/enemy spikes, cooldowns and pause.');
 }
+
+
+// Phase 2: mutable world terrain must update real landing/projectile collision,
+// preserve destruction through streaming, and regenerate crumbling ledges.
+{
+    const { game: g } = fixture();
+    const { terrainPieces } = load('world/terrainFeatures');
+    const section = generateSection(4, g.run.seed);
+    const wall = section.walls[0];
+    assert.ok(wall, 'An advanced section contains a breakable wall');
+    const bodyY = g.groundY - 40;
+    assert.equal(g.world.resolvePlayerMovement(wall.x - 150, wall.x + 150, bodyY),
+        wall.x - wall.width / 2 - 23, 'Wall stops horizontal player motion');
+    assert.ok(g.world.terrainImpact(wall.x - 120, bodyY, wall.x + 120, bodyY),
+        'Wall intercepts a swept projectile');
+    let damage = 0;
+    while (damage < wall.hp) {
+        damage += g.world.damageAtImpact(wall.x, bodyY, 1);
+    }
+    assert.equal(damage, wall.hp);
+    assert.equal(g.world.resolvePlayerMovement(wall.x - 150, wall.x + 150, bodyY),
+        wall.x + 150, 'Breaking wall opens the route');
+    assert.equal(g.world.terrainImpact(wall.x - 120, bodyY, wall.x + 120, bodyY),
+        undefined, 'Projectiles pass through destroyed walls');
+
+    const pieces = terrainPieces(section.platforms, 4);
+    const bridge = pieces.find(p => p.feature === 'bridge');
+    assert.ok(bridge, 'Advanced terrain contains destructible bridge boards');
+    const bridgeTop = g.groundY - bridge.height;
+    assert.equal(g.world.landingY(bridge.x, bridgeTop - 4, bridgeTop + 4), bridgeTop);
+    assert.equal(g.world.damageAtImpact(bridge.x, bridgeTop + 2, 1), 1);
+    assert.equal(g.world.damageAtImpact(bridge.x, bridgeTop + 2, 1), 1);
+    assert.notEqual(g.world.landingY(bridge.x, bridgeTop - 4, bridgeTop + 4),
+        bridgeTop, 'Destroyed board no longer supports the player');
+
+    const crumble = pieces.find(p => p.feature === 'crumble');
+    assert.ok(crumble);
+    const crumbleTop = g.groundY - crumble.height;
+    assert.equal(g.world.landingY(crumble.x, crumbleTop - 5, crumbleTop + 5), crumbleTop);
+    g.world.advance(0.05, crumble.x, crumbleTop);
+    g.world.advance(0.81, crumble.x, crumbleTop);
+    assert.notEqual(g.world.landingY(crumble.x, crumbleTop - 5, crumbleTop + 5),
+        crumbleTop, 'Triggered ledge collapses');
+    g.world.advance(4.1, crumble.x + 400, g.groundY);
+    assert.equal(g.world.landingY(crumble.x, crumbleTop - 5, crumbleTop + 5),
+        crumbleTop, 'Crumbling ledge regenerates');
+    g.cameras.main.setScroll(40000, 0);
+    g.world.update();
+    g.cameras.main.setScroll(wall.x - 400, 0);
+    g.world.update();
+    assert.equal(g.world.resolvePlayerMovement(wall.x - 150, wall.x + 150, bodyY),
+        wall.x + 150, 'Destroyed wall stays destroyed after section reload');
+    g.events.emit('shutdown');
+    console.log('PASS Phase 2 terrain: wall blocking, projectile hits, bridge board loss, crumble recovery and streaming state.');
+}
