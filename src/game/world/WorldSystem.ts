@@ -420,9 +420,10 @@ export class WorldSystem {
             this.sections.set(index, this.drawSection(generateSection(index, this.seed)));
         }
         for (const section of this.sections.values()) {
+            const platformById = new Map(terrainPieces(section.data.platforms, section.data.index)
+                .map(piece => [piece.id, piece]));
             for (const [id, pieces] of section.features) {
-                const platform = terrainPieces(section.data.platforms, section.data.index)
-                    .find(p => p.id === id);
+                const platform = platformById.get(id);
                 const wall = section.data.walls.find(w => w.id === id);
                 const visible = platform ? this.piecePresent(platform) : wall ? this.wallPresent(wall) : true;
                 const state = this.mutable.get(id);
