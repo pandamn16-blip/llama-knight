@@ -182,3 +182,34 @@ test('hazards spawn deterministically, away from gaps, platform roofs and reward
     assert.ok(generateHazards(2, 11, 1, [], [], []).every(h => h.kind === 'timed-spikes'));
     assert.ok(generateHazards(3, 11, 1, [], [], []).every(h => h.kind === 'snap-trap'));
 });
+
+
+test('bridge sections split into independently destructible boards and later ledges crumble', () => {
+    const exports = {};
+    const source = fs.readFileSync(path.join(__dirname, '../src/game/world/terrainFeatures.ts'), 'utf8');
+    const code = ts.transpileModule(source, { compilerOptions: {
+        module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020
+    } }).outputText;
+    vm.runInNewContext(code, { exports, require: () => ({
+        WORLD: { sectionLength: 2560, terrainTileSize: 64 }
+    }) });
+    const { terrainPieces, generateBreakableWalls, segmentWallImpact } = exports;
+    const platforms = generatePlatforms(4, 77, 0x173829);
+    const pieces = terrainPieces(platforms, 4);
+    const boards = pieces.filter(p => p.feature === 'bridge');
+    assert.ok(boards.length >= 3);
+    assert.ok(boards.every(p => p.width < 80 && p.id.includes(':board:')));
+    assert.equal(new Set(pieces.map(p => p.id)).size, pieces.length);
+    assert.ok(pieces.some(p => p.feature === 'crumble'));
+    assert.ok(terrainPieces(generatePlatforms(0, 77, 20), 0)
+        .every(p => p.feature !== 'crumble'));
+    const walls = generateBreakableWalls(4, 77, [], [4 * 2560 + 1910]);
+    assert.equal(walls.length, 1);
+    assert.equal(generateBreakableWalls(0, 77, [], []).length, 0);
+    assert.ok(Math.abs(walls[0].x - (4 * 2560 + 1910)) > 135);
+    const wall = walls[0];
+    assert.ok(segmentWallImpact(wall.x - 100, 550, wall.x + 100, 550,
+        wall, 600) !== undefined, 'Projectile hits solid wall');
+    assert.equal(segmentWallImpact(wall.x - 100, 300, wall.x + 100, 300,
+        wall, 600), undefined, 'Projectile above wall passes safely');
+});
