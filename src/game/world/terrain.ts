@@ -12,12 +12,15 @@ export interface TerrainPlatform {
 export function generatePlatforms(index: number, seed: number, roll: number): TerrainPlatform[] {
     const start = index * WORLD.sectionLength;
     const layout = roll % 3;
-    const slots = layout === 0 ? [560, 1472] : layout === 1 ? [768, 1752] : [480, 1280, 2064];
-    return slots.map((offset, i) => ({
+    // Two short, connected upper routes per section. A running jump reaches
+    // the next ledge; the ground underneath remains entirely continuous.
+    const routes = layout === 0 ? [520, 824, 1500, 1804] :
+        layout === 1 ? [640, 944, 1620, 1924] : [440, 744, 1432, 1736];
+    return routes.map((offset, i) => ({
         id: `${seed >>> 0}:${index}:platform:${i}`,
         x: start + offset,
-        width: (3 + ((roll >>> (i * 4)) & 1)) * WORLD.terrainTileSize,
-        height: [64, 96, 112][(layout + i) % 3]
+        width: 4 * WORLD.terrainTileSize,
+        height: i % 2 === 0 ? 64 : 112
     }));
 }
 
