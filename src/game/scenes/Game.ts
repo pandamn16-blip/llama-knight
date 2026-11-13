@@ -18,7 +18,7 @@ import { Player } from '../entities/Player';
 import { PlayerInput } from '../input/PlayerInput';
 import { EnemySystem } from '../systems/EnemySystem';
 import { CombatSystem } from '../systems/CombatSystem';
-import { isCharacterId } from '../characters/definitions';
+import { isCharacterId, CHARACTERS } from '../characters/definitions';
 import type { CharacterId } from '../characters/definitions';
 import { XpSystem } from '../systems/XpSystem';
 import { StructureSystem } from '../systems/StructureSystem';
@@ -76,9 +76,9 @@ export class Game extends Phaser.Scene {
 
         this.rosie = new Rosie(this, this.run);
 
-        this.playerInput = new PlayerInput(this, () => this.run.phase === 'playing');
+        this.playerInput = new PlayerInput(this, () => this.run.phase === 'playing', CHARACTERS[this.run.characterId].canShield === true);
 
-        this.enemySystem = new EnemySystem(this, this.run, this.groundY);
+        this.enemySystem = new EnemySystem(this, this.run, this.groundY, this.player);
         this.enemySystem.prepare(); // Before the first gameplay render, including both approach buffers.
         this.xpSystem = new XpSystem(this, this.run, this.player,
             () => this.openLevelUp(), () => this.updateHud());
@@ -158,7 +158,9 @@ export class Game extends Phaser.Scene {
     private setPhase(phase: RunPhase): void {
         this.run.phase = phase;
         this.debug?.resetSample(this.player, this.cameras.main);
+        if (phase !== 'playing') this.player.setShielding(false);
         this.player.setVisualPhase(phase);
+        this.enemySystem.setPhase(phase);
         this.combatSystem.setVisualPhase(phase);
         const frozen = phase !== 'playing';
         this.time.paused = frozen;
@@ -238,6 +240,7 @@ export class Game extends Phaser.Scene {
         const frameDt = Math.min(Math.max(0, delta / 1000), WORLD.maxCatchUpSeconds);
         const steps = Math.max(1, Math.ceil(frameDt / BALANCE.simulation.maxDeltaSeconds));
         const dt = frameDt / steps;
+        this.player.setShielding(this.playerInput.shieldHeld());
         const actions = this.playerInput.readActions();
         const interact = this.playerInput.interactPressed();
         let simulatedMs = 0;
@@ -254,7 +257,7 @@ export class Game extends Phaser.Scene {
             this.structures.prepare();
             if (actions.attack) this.combatSystem.attack();
             this.combatSystem.update(dt);
-            this.enemySystem.update(dt, (enemy) => this.combatSystem.checkContact(enemy));
+            this.enemySystem.update(dt, (enemy) => this.combatSystem.resolveEnemyAttack(enemy));
             if (this.run.phase !== 'playing') break;
             this.healthPickups.update();
             this.structures.update(step === 0 && interact);

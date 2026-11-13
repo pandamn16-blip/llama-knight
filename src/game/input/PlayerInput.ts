@@ -4,21 +4,21 @@ import { isMobileLayout, onLayoutResize } from '../ui/layout';
 
 export type PlayerActions = { left: boolean; right: boolean; jump: boolean; attack: boolean };
 
-type TouchAction = keyof PlayerActions;
+type TouchAction = keyof PlayerActions | 'shield';
 
 export class PlayerInput {
     private cursors: Types.Input.Keyboard.CursorKeys;
-    private keys: Record<'A' | 'D' | 'W' | 'J' | 'R' | 'M' | 'E' | 'ONE' | 'TWO' | 'THREE', Input.Keyboard.Key>;
+    private keys: Record<'A' | 'D' | 'W' | 'J' | 'R' | 'M' | 'E' | 'K' | 'ONE' | 'TWO' | 'THREE', Input.Keyboard.Key>;
     private touches: Record<TouchAction, Set<number>> = {
-        left: new Set(), right: new Set(), jump: new Set(), attack: new Set()
+        left: new Set(), right: new Set(), jump: new Set(), attack: new Set(), shield: new Set()
     };
     private joystick?: { base: GameObjects.Arc; thumb: GameObjects.Arc; pointerId?: number };
     private cleanups: (() => void)[] = [];
 
-    constructor(private scene: Scene, private isPlaying: () => boolean) {
+    constructor(private scene: Scene, private isPlaying: () => boolean, private shieldEnabled = false) {
         const { width, height } = scene.scale;
         this.cursors = scene.input.keyboard!.createCursorKeys();
-        this.keys = scene.input.keyboard!.addKeys('A,D,W,J,R,M,E,ONE,TWO,THREE') as typeof this.keys;
+        this.keys = scene.input.keyboard!.addKeys('A,D,W,J,R,M,E,K,ONE,TWO,THREE') as typeof this.keys;
         scene.input.keyboard!.addCapture(['SPACE', 'UP', 'DOWN', 'LEFT', 'RIGHT']);
 
         const mobile = isMobileLayout();
@@ -28,6 +28,7 @@ export class PlayerInput {
         }
         const jump = this.makeTouchButton(width - (mobile ? 264 : 174), height - (mobile ? 112 : 68), 'JUMP', 'jump', mobile);
         const attack = this.makeTouchButton(width - (mobile ? 102 : 70), height - (mobile ? 112 : 68), 'ATK', 'attack', mobile);
+        const shield = mobile && shieldEnabled ? this.makeTouchButton(width - 184, height - 282, 'SHIELD', 'shield', true) : undefined;
         if (mobile) {
             this.makeJoystick(height);
             const move = (pointer: Input.Pointer) => this.moveJoystick(pointer);
@@ -40,6 +41,7 @@ export class PlayerInput {
             const y = height - (mobile ? 112 : 68);
             jump.button.setPosition(width - (mobile ? 264 : 174), y); jump.label.setPosition(jump.button.x, y);
             attack.button.setPosition(width - (mobile ? 102 : 70), y); attack.label.setPosition(attack.button.x, y);
+            if (shield) { shield.button.setPosition(width - 184, height - 282); shield.label.setPosition(shield.button.x, shield.button.y); }
             if (this.joystick) {
                 this.joystick.base.y = height - 126;
                 this.joystick.thumb.setPosition(this.joystick.base.x, this.joystick.base.y);
@@ -72,6 +74,10 @@ export class PlayerInput {
         const jump = this.cursors.up.isDown || this.cursors.space.isDown || this.keys.W.isDown || this.touches.jump.size > 0;
         const attack = this.keys.J.isDown || this.touches.attack.size > 0;
         return { left, right, jump, attack };
+    }
+
+    shieldHeld(): boolean {
+        return this.isPlaying() && this.shieldEnabled && (this.keys.K.isDown || this.touches.shield.size > 0);
     }
 
     interactPressed(): boolean {
@@ -123,7 +129,7 @@ export class PlayerInput {
     }
 
     private makeTouchButton(x: number, y: number, label: string,
-        action: 'left' | 'right' | 'jump' | 'attack', mobile = false) {
+        action: TouchAction, mobile = false) {
         const button = this.scene.add.circle(x, y, mobile ? 70 : 35, 0x25263f, 0.74).setDepth(30).setScrollFactor(0).setInteractive();
         const text = this.scene.add.text(x, y, label, { fontSize: mobile ? '28px' : label.length > 2 ? '13px' : '25px', color: '#ffffff' })
             .setOrigin(0.5).setDepth(31).setScrollFactor(0);

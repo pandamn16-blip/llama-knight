@@ -1,4 +1,6 @@
 import * as Phaser from 'phaser';
+import { SHIELD } from '../characters/shield';
+import { BREAD } from '../enemies/bread';
 import { BALANCE } from '../config/balance';
 import type { RunState, RunPhase } from '../state/RunState';
 import type { Player } from '../entities/Player';
@@ -24,14 +26,18 @@ export class CombatSystem {
         scene.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroy, this);
     }
 
-    checkContact(enemy: Enemy): void {
-        if (this.run.phase !== 'playing') return;
-        if (Math.abs(enemy.sprite.x - this.player.x) < BALANCE.player.contactWidth &&
-            Math.abs(enemy.sprite.y - this.player.y) < BALANCE.player.contactHeight) this.takeDamage();
+    resolveEnemyAttack(enemy: Enemy): boolean {
+        if (this.run.phase !== 'playing' || enemy.hp <= 0 || enemy.brain.state !== 'active' || enemy.brain.remaining <= 0) return false;
+        const dx = (this.player.x - enemy.sprite.x) * enemy.brain.facing;
+        if (dx < 0 || dx > BREAD.attackRange || Math.abs(enemy.sprite.y - this.player.y) > BREAD.attackHeight) return false;
+        const sourceDirection = Math.sign(enemy.sprite.x - this.player.x) || -enemy.brain.facing;
+        if (this.player.isShielding && sourceDirection === this.player.facing) this.blockImpact();
+        else this.takeDamage();
+        return true;
     }
 
     attack() {
-        if (this.run.phase !== 'playing') return;
+        if (this.run.phase !== 'playing' || this.player.isShielding) return;
         if ((this.run.runTime * 1000) - this.run.weapon.lastAttack < this.run.weapon.cooldown) return;
         this.run.weapon.lastAttack = (this.run.runTime * 1000);
         const direction = this.player.facing;
@@ -170,6 +176,19 @@ export class CombatSystem {
             });
             this.timers.add(timer);
         }
+    }
+
+    private blockImpact(): void {
+        const effect = this.scene.add.container(this.player.x + this.player.facing * 38, this.player.y).setDepth(9).setScrollFactor(1);
+        effect.add([
+            this.scene.add.rectangle(0, 0, 5, 30, 0xfff6bd),
+            this.scene.add.rectangle(0, 0, 30, 5, 0xfff6bd).setAngle(25),
+            this.scene.add.rectangle(0, 0, 30, 5, 0xfff6bd).setAngle(-25)
+        ]);
+        this.slashes.add(effect);
+        const tween = this.scene.tweens.add({ targets: effect, alpha: 0, duration: SHIELD.impactMs,
+            onComplete: () => { effect.destroy(); this.slashes.delete(effect); this.tweens.delete(tween); } });
+        this.tweens.add(tween);
     }
 
     private takeDamage() {

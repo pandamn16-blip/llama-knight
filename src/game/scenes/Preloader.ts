@@ -1,3 +1,5 @@
+import { loadBreadAnimations, registerBreadAnimations } from '../enemies/bread';
+import { loadShieldSheets, registerShieldAnimations } from '../characters/shield';
 import { Scene } from 'phaser';
 import { loadWeaponEffects, registerWeaponEffects } from '../weapons/slashEffect';
 import { loadCharacterSheets, registerCharacterAnimations } from '../characters/spriteAnimations';
@@ -37,6 +39,8 @@ export class Preloader extends Scene
         this.load.image('logo', 'logo.png');
         loadCharacterSheets(this);
         loadWeaponEffects(this);
+        loadBreadAnimations(this);
+        loadShieldSheets(this);
     }
 
     create ()
@@ -47,6 +51,8 @@ export class Preloader extends Scene
         //  Move to the MainMenu. You could also swap this for a Scene Transition, such as a camera fade.
         registerCharacterAnimations(this);
         registerWeaponEffects(this);
+        registerBreadAnimations(this);
+        registerShieldAnimations(this);
         this.scene.start('MainMenu');
     }
 }

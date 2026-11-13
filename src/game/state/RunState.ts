@@ -10,6 +10,7 @@ export interface RunState {
     seed: number;
     characterId: CharacterId;
     weapon: WeaponState;
+    shielding: boolean;
     velocityY: number;
     onGround: boolean;
     health: number;
@@ -34,7 +35,7 @@ export function createRunState(characterId: CharacterId = 'llamaCrunch', seed = 
     return {
         seed: seed >>> 0,
         characterId, weapon: createWeaponState(character.startingWeapon),
-        velocityY: 0, onGround: true,
+        shielding: false, velocityY: 0, onGround: true,
         health: character.health, maxHealth: character.health,
         kills: 0, distance: 0, xp: 0,
         startX: BALANCE.player.startX, furthestX: BALANCE.player.startX,

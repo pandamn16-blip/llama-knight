@@ -10,12 +10,13 @@ export interface CharacterDefinition {
     moveSpeed: number;
     startingWeapon: WeaponId;
     visual: CharacterVisual;
+    canShield?: boolean;
 }
 
 export const CHARACTERS: Record<CharacterId, CharacterDefinition> = {
     llamaCrunch: {
         id: 'llamaCrunch', name: 'Llama Crunch', description: 'Defensive and close-range.\nStand your ground and slash the bread.',
-        health: 6, moveSpeed: 280, startingWeapon: 'swordSlash', visual: 'llama'
+        health: 6, moveSpeed: 280, startingWeapon: 'swordSlash', visual: 'llama', canShield: true
     },
     candy: {
         id: 'candy', name: 'Candy', description: 'Fast and ranged.\nKeep moving and fire from a distance.',

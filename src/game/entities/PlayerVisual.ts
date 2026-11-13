@@ -1,4 +1,5 @@
 import type { Scene, GameObjects } from 'phaser';
+import { CHARACTER_SHIELDS, hasShieldSheet } from '../characters/shield';
 import type { CharacterVisual } from '../characters/definitions';
 import { CHARACTER_SPRITES, hasCharacterSheet, resolveCharacterAnimation } from '../characters/spriteAnimations';
 import type { PlayerAnimation, CharacterSpriteSheet } from '../characters/spriteAnimations';
@@ -55,6 +56,8 @@ export function createPlayerVisual(scene: Scene, x: number, y: number, visual: C
 
 export class PlayerVisual {
     readonly container: GameObjects.Container;
+    private shield?: GameObjects.Sprite;
+    private defending = false;
     private animated?: GameObjects.Sprite;
     private sheet?: CharacterSpriteSheet;
     private state?: PlayerAnimation;
@@ -70,10 +73,32 @@ export class PlayerVisual {
             const object = child as GameObjects.Shape;
             return { object, x: object.x, scaleX: object.scaleX };
         });
+        const shield = CHARACTER_SHIELDS[visual];
+        if (shield && hasShieldSheet(scene, visual)) {
+            this.shield = scene.add.sprite(shield.offsetX, shield.offsetY, shield.key, 0)
+                .setOrigin(shield.originX, shield.originY).setScale(shield.scale).setVisible(false);
+            this.container.add(this.shield);
+        }
         this.play('idle');
     }
 
+    setDefending(held: boolean): void {
+        if (held && (this.action === 'death' || (this.action === 'hurt' && this.animated?.anims.isPlaying))) return;
+        if (this.defending === held) return;
+        this.defending = held;
+        this.shield?.setVisible(held);
+        this.animated?.setVisible(!held || !this.shield);
+        for (const part of this.placeholderParts) part.object.setVisible(!held || !this.shield);
+        if (held) {
+            this.action = undefined;
+            if (this.shield) { this.shield.play(this.shield.texture.key, true); this.animated?.anims.pause(); }
+        } else {
+            this.shield?.anims.pause(); this.animated?.anims.resume(); this.state = undefined;
+        }
+    }
+
     setFacing(direction: -1 | 1): void {
+        this.shield?.setFlipX(direction === -1);
         if (this.animated) {
             // Phaser mirrors the frame in place. Its origin, offsets and foot pivot stay fixed.
             this.animated.setFlipX(direction === -1);
@@ -88,7 +113,7 @@ export class PlayerVisual {
     }
 
     update(run: RunState, moving: boolean): void {
-        if (!this.animated || this.action === 'death') return;
+        if (!this.animated || this.action === 'death' || (this.defending && this.shield)) return;
         if (this.action && this.animated.anims.isPlaying) return;
         this.action = undefined;
         const state = !run.onGround ? (run.velocityY < 0 ? 'jump' : 'fall') : moving ? 'run' : 'idle';
@@ -98,6 +123,7 @@ export class PlayerVisual {
     showAction(action: 'attack' | 'hurt' | 'death'): boolean {
         if (!this.animated || this.action === 'death') return false;
         if (action === 'attack' && this.action === 'hurt' && this.animated.anims.isPlaying) return false;
+        this.setDefending(false);
         this.action = action;
         return this.play(action, true);
     }
@@ -108,9 +134,12 @@ export class PlayerVisual {
     }
 
     setPhase(phase: RunPhase): void {
-        if (!this.animated) return;
-        if (phase === 'paused' || phase === 'choosingUpgrade') this.animated.anims.pause();
-        else this.animated.anims.resume(); // Death is visual only; the run remains stopped.
+        const frozen = phase === 'paused' || phase === 'choosingUpgrade';
+        if (frozen) { this.animated?.anims.pause(); this.shield?.anims.pause(); }
+        else {
+            if (!this.defending || !this.shield) this.animated?.anims.resume();
+            if (this.defending) this.shield?.anims.resume();
+        }
     }
 
     private play(state: PlayerAnimation, restart = false): boolean {

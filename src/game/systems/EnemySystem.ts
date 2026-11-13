@@ -1,18 +1,27 @@
 import * as Phaser from 'phaser';
 import { WORLD } from '../config/world';
 import { BALANCE } from '../config/balance';
+import type { Player } from '../entities/Player';
+import { BREAD, hasBreadAnimations } from '../enemies/bread';
+import type { BreadAnimation } from '../enemies/bread';
+import type { RunPhase } from '../state/RunState';
 import type { RunState } from '../state/RunState';
 import { breadPlacementId, generateSection, sectionSeed, sectionWindow } from '../world/sections';
 
-export type Enemy = { sprite: Phaser.GameObjects.Container; speed: number; hp: number; placementX: number; placementId: string };
-type EnemyRecord = { hp: number; speed: number; defeated: boolean };
+export type BreadState = 'idle' | 'patrol' | 'chase' | 'windup' | 'active' | 'recover' | 'return';
+type Brain = { state: BreadState; remaining: number; facing: -1 | 1; targetX: number; cycle: number; attackSpent: boolean };
+export type Enemy = { sprite: Phaser.GameObjects.Container; speed: number; hp: number; placementX: number; placementId: string;
+    brain: Brain; twig?: Phaser.GameObjects.Rectangle; art?: Phaser.GameObjects.Sprite; alert: Phaser.GameObjects.Text; animation?: BreadAnimation; deathElapsed?: number };
+type EnemyRecord = { hp: number; speed: number; defeated: boolean; x: number; placementX: number; brain: Brain };
 
 export class EnemySystem {
     private items: Enemy[] = [];
     // Run-long lightweight records; only nearby records have live sprites.
+    private occupied = new Map<number, Set<string>>();
+    private dying = new Set<Enemy>();
     private records = new Map<string, EnemyRecord>();
 
-    constructor(private scene: Phaser.Scene, private run: RunState, private groundY: number) {
+    constructor(private scene: Phaser.Scene, private run: RunState, private groundY: number, private player?: Pick<Player, 'x' | 'y'>) {
         scene.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroy, this);
     }
 
@@ -25,8 +34,12 @@ export class EnemySystem {
         record.hp = enemy.hp;
         if (enemy.hp > 0) return false;
         record.defeated = true;
-        enemy.sprite.destroy();
         this.items.splice(this.items.indexOf(enemy), 1);
+        this.unindex(enemy.placementId, record.x);
+        enemy.alert.setVisible(false); enemy.deathElapsed = 0;
+        this.dying.add(enemy);
+        enemy.art?.once('animationcomplete', () => { enemy.sprite.destroy(); this.dying.delete(enemy); });
+        this.play(enemy, 'death');
         return true;
     }
 
@@ -46,27 +59,136 @@ export class EnemySystem {
         const active = new Set(this.items.map(enemy => enemy.placementId));
         const window = sectionWindow(camera.scrollX, camera.width, buffer / camera.width);
         for (let index = window.first; index <= window.last; index++) {
+            for (const id of this.occupied.get(index) ?? []) {
+                const record = this.records.get(id)!;
+                if (!active.has(id) && !record.defeated && record.x >= camera.scrollX - buffer &&
+                    record.x <= camera.scrollX + camera.width + buffer) {
+                    this.spawnBread(record.placementX, id); active.add(id);
+                }
+            }
             for (const { id, x } of generateSection(index, this.run.seed).enemies) {
-                if (x >= camera.scrollX - buffer && x <= camera.scrollX + camera.width + buffer &&
-                    !active.has(id) && !this.records.get(id)?.defeated) this.spawnBread(x, id);
+                const record = this.records.get(id);
+                if (!record && !active.has(id) && x >= camera.scrollX - buffer && x <= camera.scrollX + camera.width + buffer) {
+                    this.spawnBread(x, id); active.add(id);
+                }
             }
         }
     }
 
-    update(_dt: number, onContactCheck: (enemy: Enemy) => void): void {
+    update(dt: number, onAttack: (enemy: Enemy) => boolean | void): void {
         if (this.run.phase !== 'playing') return;
-        const camera = this.scene.cameras.main;
-        // Preparation is spatial, never gated by the runner's timed spawn interval.
         this.prepare();
+        const camera = this.scene.cameras.main;
+        for (const enemy of this.dying) {
+            enemy.deathElapsed = (enemy.deathElapsed ?? 0) + dt;
+            if (!enemy.art) enemy.sprite.setAlpha(Math.max(0, 1 - enemy.deathElapsed / BREAD.deathDuration));
+            if (enemy.deathElapsed >= BREAD.deathDuration + (enemy.art ? 0.25 : 0)) { enemy.sprite.destroy(); this.dying.delete(enemy); }
+        }
         for (const enemy of this.items) {
-            // Render/contact culling never changes the saved world state.
-            const visible = enemy.sprite.x >= camera.scrollX - 80 &&
-                enemy.sprite.x <= camera.scrollX + camera.width + 80;
-            if (enemy.sprite.visible !== visible) enemy.sprite.setVisible(visible);
-            if (!visible) continue; // Distant prepared occupants have no per-frame contact/AI work.
-            onContactCheck(enemy);
+            const near = enemy.sprite.x >= camera.scrollX - BREAD.activationMargin &&
+                enemy.sprite.x <= camera.scrollX + camera.width + BREAD.activationMargin;
+            enemy.sprite.setVisible(enemy.sprite.x >= camera.scrollX - 80 && enemy.sprite.x <= camera.scrollX + camera.width + 80);
+            if (!near) { enemy.art?.anims.pause(); continue; }
+            enemy.art?.anims.resume();
+            if (this.player) this.advance(enemy, dt, onAttack);
+            this.syncVisual(enemy);
             if (this.run.phase !== 'playing') return;
         }
+    }
+
+    setPhase(phase: RunPhase): void {
+        for (const enemy of [...this.items, ...this.dying]) {
+            if (phase === 'playing') enemy.art?.anims.resume();
+            else enemy.art?.anims.pause();
+        }
+    }
+
+    private advance(enemy: Enemy, dt: number, onAttack: (enemy: Enemy) => boolean | void): void {
+        const brain = enemy.brain, player = this.player!;
+        const dx = player.x - enemy.sprite.x, distance = Math.abs(dx);
+        const closeHeight = Math.abs(player.y - enemy.sprite.y);
+        const homeDistance = Math.abs(enemy.sprite.x - enemy.placementX);
+        if (['idle', 'patrol', 'return'].includes(brain.state) && distance <= BREAD.detectionRange &&
+            closeHeight <= BREAD.detectionHeight && (brain.state !== 'return' || homeDistance <= BREAD.patrolDistance)) brain.state = 'chase';
+        if (brain.state === 'chase' && (distance > BREAD.loseRange || homeDistance > BREAD.territoryLeash)) brain.state = 'return';
+        switch (brain.state) {
+            case 'idle':
+                brain.remaining -= dt;
+                if (brain.remaining <= 1e-9) {
+                    brain.state = 'patrol'; brain.cycle++;
+                    brain.targetX = Math.max(BALANCE.player.minX, enemy.placementX + (brain.cycle % 2 ? -1 : 1) * BREAD.patrolDistance);
+                }
+                break;
+            case 'patrol':
+                if (this.move(enemy, brain.targetX, BREAD.patrolSpeed, dt)) this.idle(enemy);
+                break;
+            case 'return':
+                if (this.move(enemy, enemy.placementX, BREAD.returnSpeed, dt)) this.idle(enemy);
+                break;
+            case 'chase':
+                brain.facing = dx < 0 ? -1 : 1;
+                if (distance <= BREAD.meleeStop && closeHeight <= BREAD.attackHeight) {
+                    brain.state = 'windup'; brain.remaining = BREAD.windup;
+                } else this.move(enemy, player.x, BREAD.chaseSpeed, dt);
+                break;
+            case 'windup':
+                brain.remaining -= dt;
+                if (brain.remaining <= 1e-9) { brain.state = 'active'; brain.remaining = BREAD.active; brain.attackSpent = false; }
+                break;
+            case 'active':
+                brain.remaining -= dt;
+                if (brain.remaining <= 1e-9) { brain.state = 'recover'; brain.remaining = BREAD.recovery; }
+                break;
+            case 'recover':
+                brain.remaining -= dt;
+                if (brain.remaining <= 1e-9) this.idle(enemy);
+                break;
+        }
+        // Facing is committed during windup/strike. Only this active window can request a hit.
+        if (brain.state === 'active' && !brain.attackSpent && onAttack(enemy) !== false) brain.attackSpent = true;
+        const record = this.records.get(enemy.placementId)!;
+        if (record.x !== enemy.sprite.x) {
+            if (Math.floor(record.x / WORLD.sectionLength) !== Math.floor(enemy.sprite.x / WORLD.sectionLength)) {
+                this.unindex(enemy.placementId, record.x); this.index(enemy.placementId, enemy.sprite.x);
+            }
+            record.x = enemy.sprite.x;
+        }
+    }
+
+    private move(enemy: Enemy, target: number, speed: number, dt: number): boolean {
+        const dx = target - enemy.sprite.x;
+        if (dx !== 0) enemy.brain.facing = dx < 0 ? -1 : 1;
+        enemy.sprite.x += Math.sign(dx) * Math.min(Math.abs(dx), speed * dt);
+        return Math.abs(target - enemy.sprite.x) < 0.01;
+    }
+
+    private idle(enemy: Enemy): void {
+        const roll = sectionSeed(this.run.seed ^ enemy.placementX, enemy.brain.cycle) / 0x100000000;
+        enemy.brain.state = 'idle'; enemy.brain.remaining = BREAD.idleMin + roll * (BREAD.idleMax - BREAD.idleMin);
+    }
+
+    private play(enemy: Enemy, state: BreadAnimation): void {
+        if (enemy.art && enemy.animation !== state) { enemy.art.play(`bread:${state}`); enemy.animation = state; }
+    }
+
+    private syncVisual(enemy: Enemy): void {
+        const brain = enemy.brain;
+        enemy.alert.setVisible(brain.state === 'windup');
+        enemy.art?.setFlipX(brain.facing === -1);
+        if (enemy.twig) { enemy.twig.x = brain.facing * 32; enemy.twig.setAngle(brain.facing * (brain.state === 'active' ? 70 : 25)); }
+        const striking = brain.state === 'active' || (brain.state === 'windup' && brain.remaining <= BREAD.animationLead + 1e-9);
+        if (striking) this.play(enemy, 'attack');
+        else if (brain.state === 'recover' && enemy.animation === 'attack' && enemy.art?.anims.isPlaying) return;
+        else this.play(enemy, ['patrol', 'chase', 'return'].includes(brain.state) ? 'run' : 'idle');
+    }
+
+    private index(id: string, x: number): void {
+        const section = Math.floor(x / WORLD.sectionLength), ids = this.occupied.get(section) ?? new Set<string>();
+        ids.add(id); this.occupied.set(section, ids);
+    }
+    private unindex(id: string, x: number): void {
+        const section = Math.floor(x / WORLD.sectionLength), ids = this.occupied.get(section);
+        ids?.delete(id); if (!ids?.size) this.occupied.delete(section);
     }
 
     private spawnBread(worldX: number = WORLD.enemyStartX, id = breadPlacementId(this.run.seed, worldX)) {
@@ -81,23 +203,37 @@ export class EnemySystem {
                 speed: BALANCE.enemy.minSpeed + Math.floor(speedRoll * (BALANCE.enemy.maxSpeed - BALANCE.enemy.minSpeed + 1)) +
                     difficulty * BALANCE.enemy.speedPerDifficulty,
                 hp: BALANCE.enemy.initialHealth + Math.floor(difficulty / BALANCE.enemy.difficultyPerHealth),
-                defeated: false
+                defeated: false, x: worldX, placementX: worldX,
+                brain: { state: 'idle', remaining: BREAD.idleMin + speedRoll * (BREAD.idleMax - BREAD.idleMin),
+                    facing: -1, targetX: worldX, cycle: 0, attackSpent: false }
             };
-            this.records.set(id, record);
+            this.records.set(id, record); this.index(id, record.x);
         }
-        const sprite = this.scene.add.container(worldX, this.groundY - BALANCE.enemy.groundOffset).setDepth(6);
-        sprite.add([
+        const sprite = this.scene.add.container(record.x, this.groundY - BALANCE.enemy.groundOffset).setDepth(6);
+        let art: Phaser.GameObjects.Sprite | undefined;
+        let twig: Phaser.GameObjects.Rectangle | undefined;
+        if (hasBreadAnimations(this.scene)) {
+            art = this.scene.add.sprite(BREAD.offsetX, BREAD.offsetY, 'bread:idle', 0)
+                .setOrigin(BREAD.originX, BREAD.originY).setScale(BREAD.scale);
+            sprite.add(art);
+        } else sprite.add([
             this.scene.add.rectangle(0, 0, 57, 65, 0x9c612f).setStrokeStyle(3, 0x563718),
             this.scene.add.rectangle(0, 0, 46, 54, 0xeac38b),
             this.scene.add.circle(-11, -7, 3, 0x2d211b),
             this.scene.add.circle(11, -7, 3, 0x2d211b),
             this.scene.add.ellipse(0, 12, 13, 5, 0x4c2e22)
         ]);
+        if (!art) { twig = this.scene.add.rectangle(-32, 0, 5, 34, 0x72512f); sprite.add(twig); }
         sprite.setScrollFactor(1, 1, true);
         const camera = this.scene.cameras.main;
         sprite.setVisible(worldX >= camera.scrollX - 80 && worldX <= camera.scrollX + camera.width + 80);
         // Retain the existing speed metadata for later behaviour; no runner drift is applied.
-        const enemy = { sprite, speed: record.speed, hp: record.hp, placementX: worldX, placementId: id };
+        const alert = this.scene.add.text(0, -62, '!', { fontSize: '28px', color: '#ffe19a', backgroundColor: '#70452f' })
+            .setOrigin(0.5).setVisible(false);
+        sprite.add(alert);
+        const enemy: Enemy = { sprite, art, twig, alert, brain: record.brain, speed: record.speed, hp: record.hp,
+            placementX: record.placementX, placementId: id };
+        this.syncVisual(enemy);
         this.items.push(enemy);
         return enemy;
     }
@@ -105,7 +241,8 @@ export class EnemySystem {
     destroy(): void {
         this.scene.events.off(Phaser.Scenes.Events.SHUTDOWN, this.destroy, this);
         for (const enemy of this.items) if (enemy.sprite.active) enemy.sprite.destroy();
-        this.items = [];
+        for (const enemy of this.dying) enemy.sprite.destroy();
+        this.items = []; this.dying.clear(); this.occupied.clear();
         this.records.clear();
     }
 }

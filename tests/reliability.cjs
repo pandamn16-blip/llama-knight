@@ -143,11 +143,11 @@ function fixture(characterId = 'llamaCrunch') {
         setBackgroundColor() {}, shakeEffect: { isRunning: false }, shake() { this.shakeEffect.isRunning = true; } } };
     game.groundY = 768 * 0.78;
     game.run = createRunState(characterId);
-    game.player = { facing: 1, x: 300, y: game.groundY - 40, sprite: shape('player', 300, game.groundY - 40), update() {}, showAttack() {}, showHurt() {}, showDeath() {}, setVisualPhase() {} };
+    game.player = { facing: 1, x: 300, y: game.groundY - 40, sprite: shape('player', 300, game.groundY - 40), update() {}, setShielding(held) { game.run.shielding = held; }, showAttack() {}, showHurt() {}, showDeath() {}, setVisualPhase() {} };
     game.run.startX = game.run.furthestX = game.player.x;
     game.playerInput = {
         clearTouch() {}, clearAll() {}, readActions: () => ({ left: false, right: false, jump: false, attack: false }),
-        interactPressed: () => false, restartPressed: () => false, menuPressed: () => false, upgradeChoice: () => undefined
+        shieldHeld: () => false, interactPressed: () => false, restartPressed: () => false, menuPressed: () => false, upgradeChoice: () => undefined
     };
     game.hud = { update() {} };
     game.worldCamera = new WorldCamera(game.cameras.main, game.scale.height);
@@ -226,10 +226,11 @@ function fixture(characterId = 'llamaCrunch') {
 // Fatal contact stops the enemy loop and prevents XP/level-up processing that frame.
 {
     const { game: g } = fixture();
-    g.run.health = 1;
+    g.run.health = 1; g.enemySystem.player = g.player;
     g.enemySystem.spawnBread(); g.enemySystem.spawnBread(WORLD.enemyStartX + WORLD.enemySpacing);
     for (const enemy of g.enemySystem.enemies) {
         enemy.sprite.x = g.player.x; enemy.sprite.y = g.player.y;
+        enemy.brain.state = 'active'; enemy.brain.remaining = 0.1;
     }
     const untouched = g.enemySystem.enemies[0];
     g.xpSystem.dropGem(g.player.x, g.player.y);
@@ -242,7 +243,7 @@ function fixture(characterId = 'llamaCrunch') {
     assert.equal(g.xpSystem.gems.length, 1);
     assert.equal(untouched.sprite.x, g.player.x);
     const snapshot = JSON.stringify(g.run);
-    g.combatSystem.checkContact(untouched); g.combatSystem.attack(); g.xpSystem.checkLevelUp();
+    g.combatSystem.resolveEnemyAttack(untouched); g.combatSystem.attack(); g.xpSystem.checkLevelUp();
     g.update(32, 16);
     assert.equal(JSON.stringify(g.run), snapshot);
 }
@@ -269,7 +270,7 @@ for (let cycle = 0; cycle < 10; cycle++) {
     g.enemySystem.spawnBread();
     const enemy = g.enemySystem.enemies[0];
     enemy.hp = 3; enemy.sprite.x = g.player.x + 20; enemy.sprite.y = g.player.y;
-    g.combatSystem.attack(); g.combatSystem.checkContact(enemy);
+    g.combatSystem.attack(); enemy.brain.state = 'active'; enemy.brain.remaining = 0.1; g.combatSystem.resolveEnemyAttack(enemy);
     g.xpSystem.dropGem(500, 400);
     g.events.emit('shutdown');
     assert.equal(g.enemySystem.enemies.length, 0);
@@ -564,7 +565,7 @@ for (const characterId of ['llamaCrunch', 'candy']) {
     g.enemySystem.spawnBread();
     const enemy = g.enemySystem.enemies[0];
     enemy.sprite.x = g.player.x; enemy.sprite.y = g.player.y;
-    g.combatSystem.checkContact(enemy);
+    enemy.brain.state = 'active'; enemy.brain.remaining = 0.1; g.combatSystem.resolveEnemyAttack(enemy);
     assert.equal(rosie.speech.text, getRosieLine({ characterId, event: 'damage' }));
     g.run.xp = 3; g.xpSystem.checkLevelUp();
     const levelLine = getRosieLine({ characterId, event: 'levelUp' });
@@ -572,7 +573,7 @@ for (const characterId of ['llamaCrunch', 'candy']) {
     advance(10000); assert.equal(rosie.speech.text, levelLine);
     g.chooseUpgrade(0);
     g.run.health = 1; g.run.runTime = 1;
-    g.combatSystem.checkContact(enemy);
+    enemy.brain.state = 'active'; enemy.brain.remaining = 0.1; g.combatSystem.resolveEnemyAttack(enemy);
     assert.equal(g.run.phase, 'gameOver');
     assert.equal(rosie.speech.text, getRosieLine({ characterId, event: 'death' }));
     advance(10000);
@@ -881,9 +882,9 @@ function installCharacterSprites(scene, width, height, missingFrame) {
     g.combatSystem.attack(); assert.equal(sprite.plays.length, plays);
     g.enemySystem.spawnBread(); const enemy = g.enemySystem.enemies[0];
     enemy.sprite.x = g.player.x; enemy.sprite.y = g.player.y;
-    g.combatSystem.checkContact(enemy); assert.equal(sprite.animationKey, 'llama-crunch:hurt');
+    enemy.brain.state = 'active'; enemy.brain.remaining = 0.1; g.combatSystem.resolveEnemyAttack(enemy); assert.equal(sprite.animationKey, 'llama-crunch:hurt');
     g.run.health = 1; g.run.runTime = 1;
-    g.combatSystem.checkContact(enemy);
+    enemy.brain.state = 'active'; enemy.brain.remaining = 0.1; g.combatSystem.resolveEnemyAttack(enemy);
     assert.equal(g.run.phase, 'gameOver'); assert.equal(sprite.animationKey, 'llama-crunch:death');
     g.setPauseReason('portrait', true);
     assert.equal(g.run.phase, 'gameOver'); assert.equal(sprite.anims.paused, true);
@@ -903,6 +904,8 @@ console.log('PASS sprite integration: exact sheet/frame validation, animation ma
     }));
     const slashEffect = load('weapons/slashEffect').SWORD_SLASH_EFFECT;
     sources.set(slashEffect.key, slashEffect);
+    const { breadSheet } = load('enemies/bread');
+    for (const state of ['idle', 'run', 'attack', 'death']) { const source = breadSheet(state); sources.set(source.key, source); }
     for (const sheet of sources.values()) {
         const file = path.join(__dirname, '../public/assets', sheet.path);
         assert.ok(fs.existsSync(file), `Configured character asset missing: ${file}`);
@@ -1375,7 +1378,7 @@ for (const characterId of ['llamaCrunch', 'candy']) {
     enemy.hp = 7; enemy.sprite.x = 8540; enemy.sprite.y = g.player.y;
     g.combatSystem.attack(); assert.equal(enemy.hp, 5);
     const slash = [...g.combatSystem.slashes][0]; assert.equal(slash.x, 8500 + 115 / 2);
-    enemy.sprite.x = 8500; g.combatSystem.checkContact(enemy);
+    enemy.sprite.x = 8500; enemy.brain.state = 'active'; enemy.brain.remaining = 0.1; g.combatSystem.resolveEnemyAttack(enemy);
     assert.equal(g.run.health, 5);
     g.events.emit('shutdown');
 }
@@ -2141,3 +2144,100 @@ for (const reward of ['xp', 'heal']) {
     g.events.emit('shutdown');
 }
 console.log('PASS Stage 2C: deterministic early/later chests, contextual tap/E interaction, free upgrades without levelling, XP/healing rewards, persistent opened state, pause-aware notices and cleanup.');
+
+
+// Bread state progression: no contact damage, committed windup, one strike, recovery and return.
+{
+    const { game: g } = fixture(); const { BREAD } = load('enemies/bread');
+    g.enemySystem.player = g.player; g.player.x = 300;
+    const enemy = g.enemySystem.spawnBread(500);
+    assert.equal(g.combatSystem.resolveEnemyAttack(enemy), false);
+    const strike = e => g.combatSystem.resolveEnemyAttack(e);
+    g.enemySystem.update(0.05, strike); assert.equal(enemy.brain.state, 'chase'); assert.ok(enemy.sprite.x < 500);
+    g.player.x = enemy.sprite.x - 40;
+    g.enemySystem.update(0.05, strike); assert.equal(enemy.brain.state, 'windup'); assert.equal(g.run.health, 6);
+    const before = JSON.stringify(enemy.brain); g.setPhase('choosingUpgrade');
+    g.enemySystem.update(1, strike); assert.equal(JSON.stringify(enemy.brain), before);
+    g.setPhase('playing'); g.enemySystem.update(BREAD.windup, strike);
+    assert.equal(enemy.brain.state, 'active'); assert.equal(g.run.health, 5);
+    g.enemySystem.update(BREAD.active / 2, strike); assert.equal(g.run.health, 5);
+    g.enemySystem.update(BREAD.active / 2, strike); assert.equal(enemy.brain.state, 'recover');
+    g.enemySystem.update(BREAD.recovery, strike); g.player.x = enemy.sprite.x + 200;
+    g.enemySystem.update(0.05, strike); assert.equal(enemy.brain.facing, 1);
+    g.player.x = enemy.sprite.x + BREAD.loseRange + 100;
+    g.enemySystem.update(0.05, strike); assert.ok(['return', 'idle'].includes(enemy.brain.state));
+    g.events.emit('shutdown');
+}
+{
+    const { game: g } = fixture(); g.enemySystem.player = g.player;
+    const enemy = g.enemySystem.spawnBread(2500); enemy.hp = 7; g.enemySystem.damage(enemy, 2);
+    g.cameras.main.setScroll(2200, 0); g.player.x = 2800;
+    for (let i = 0; i < 25; i++) g.enemySystem.update(0.05, () => false);
+    assert.ok(enemy.sprite.x > 2560); const x = enemy.sprite.x, brain = JSON.stringify(enemy.brain), id = enemy.placementId;
+    g.cameras.main.setScroll(20000, 0); g.enemySystem.prepare(); assert.equal(enemy.sprite.active, false);
+    g.cameras.main.setScroll(x - 400, 0); g.enemySystem.prepare();
+    const restored = g.enemySystem.enemies.find(e => e.placementId === id);
+    assert.equal(restored.sprite.x, x); assert.equal(restored.hp, 5); assert.equal(JSON.stringify(restored.brain), brain);
+    assert.equal(g.enemySystem.damage(restored, 5), true); assert.equal(g.enemySystem.damage(restored, 5), false);
+    assert.ok(!g.enemySystem.enemies.includes(restored)); assert.equal(restored.sprite.active, true);
+    g.enemySystem.update(0.5, () => false); assert.equal(restored.sprite.active, false);
+    assert.equal(g.enemySystem.spawnBread(2500, id), undefined);
+    g.events.emit('shutdown'); assert.equal(g.enemySystem.occupied.size, 0);
+}
+console.log('PASS Bread AI: chase both directions, telegraph/one-hit active window/recovery, no contact ticks, pause, return, moving section persistence and immediate death deactivation.');
+
+
+// Resolve shielding at impact, independently of the stance artwork or windup start.
+for (const [character, facing, sourceSide, raisedAtStart, raisedAtImpact, blocked] of [
+    ['llamaCrunch', 1, 1, true, true, true], ['llamaCrunch', 1, -1, true, true, false],
+    ['llamaCrunch', -1, -1, true, true, true], ['llamaCrunch', 1, 1, true, false, false],
+    ['llamaCrunch', 1, 1, false, true, true], ['candy', 1, 1, true, true, false]
+]) {
+    const { game: g } = fixture(character);
+    g.player = new Player(g, g.run, g.groundY);
+    g.combatSystem = new CombatSystem(g, g.run, g.player, g.enemySystem, () => {}, () => g.endGame(), () => {});
+    g.player.update({ left: facing === -1, right: facing === 1, jump: false }, 0);
+    g.player.setShielding(raisedAtStart);
+    const enemy = g.enemySystem.spawnBread(g.player.x + sourceSide * 40); enemy.brain.facing = -sourceSide;
+    g.player.setShielding(raisedAtImpact);
+    enemy.brain.state = 'active'; enemy.brain.remaining = 0.1;
+    const hp = g.run.health; assert.equal(g.combatSystem.resolveEnemyAttack(enemy), true);
+    assert.equal(g.run.health, hp - (blocked ? 0 : 1));
+    if (blocked) assert.equal(g.combatSystem.slashes.size, 1);
+    g.events.emit('shutdown');
+}
+for (const character of ['llamaCrunch', 'candy']) {
+    const { game: g } = fixture(character); g.player = new Player(g, g.run, g.groundY);
+    g.combatSystem = new CombatSystem(g, g.run, g.player, g.enemySystem, () => {}, () => {}, () => {});
+    const start = g.player.x; g.player.setShielding(true);
+    g.player.update({ left: false, right: true, jump: true }, 0.1);
+    const multiplier = character === 'llamaCrunch' ? load('characters/shield').SHIELD.movementMultiplier : 1;
+    assert.ok(Math.abs(g.player.x - start - g.run.moveSpeed * multiplier * 0.1) < 1e-8);
+    assert.equal(g.run.onGround, false); assert.equal(g.run.velocityY, -490);
+    const last = g.run.weapon.lastAttack; g.combatSystem.attack();
+    assert.equal(g.run.weapon.lastAttack === last, character === 'llamaCrunch');
+    g.player.setShielding(false); const x = g.player.x;
+    g.player.update({ left: false, right: true, jump: false }, 0.1);
+    assert.ok(Math.abs(g.player.x - x - g.run.moveSpeed * 0.1) < 1e-8);
+    g.combatSystem.attack(); assert.equal(g.run.weapon.lastAttack, 0);
+    g.events.emit('shutdown');
+}
+{
+    mobileLayout = true;
+    const { game: g, objects } = fixture(); installKeyboard(g); g.scale.width = 1662;
+    const input = new PlayerInput(g, () => g.run.phase === 'playing', true);
+    const buttons = objects.filter(o => o.kind === 'circle' && o.args[0] === 70);
+    input.joystick.base.emit('pointerdown', { id: 1, x: 180 });
+    buttons[0].emit('pointerdown', { id: 2 }); buttons[1].emit('pointerdown', { id: 3 }); buttons[2].emit('pointerdown', { id: 4 });
+    assert.equal(input.shieldHeld(), true); assert.equal(input.readActions().right, true);
+    assert.equal(input.readActions().jump, true); assert.equal(input.readActions().attack, true);
+    g.input.emit('pointerup', { id: 4 }); assert.equal(input.shieldHeld(), false); assert.equal(input.readActions().attack, true);
+    input.keys.K.isDown = true; assert.equal(input.shieldHeld(), true);
+    input.clearAll(); assert.equal(input.shieldHeld(), false);
+    g.events.emit('shutdown'); assert.equal(g.scale.listenerCount('resize'), 0); mobileLayout = false;
+    const source = load('characters/shield').CHARACTER_SHIELDS.llama;
+    const png = fs.readFileSync(path.join(__dirname, '../public/assets', source.path));
+    assert.equal(png.readUInt32BE(16), source.width); assert.equal(png.readUInt32BE(20), source.height);
+    assert.equal(source.width / source.frameSize, 3); assert.equal(png[25], 6);
+}
+console.log('PASS shielding: front/back/left blocks at impact, late raise/release, unchanged Candy, movement/jump/attack restoration, four independent fingers, cleanup and native shield sheet.');

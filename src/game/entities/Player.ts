@@ -3,6 +3,7 @@ import { BALANCE } from '../config/balance';
 import type { RunState, RunPhase } from '../state/RunState';
 import { PlayerVisual } from './PlayerVisual';
 export { createPlayerVisual } from './PlayerVisual';
+import { SHIELD } from '../characters/shield';
 import { CHARACTERS } from '../characters/definitions';
 import type { PlayerActions } from '../input/PlayerInput';
 
@@ -18,6 +19,14 @@ export class Player {
             groundY - BALANCE.player.groundOffset, CHARACTERS[run.characterId].visual);
         this.sprite = this.visual.container;
         this.sprite.setScrollFactor(1, 1, true);
+    }
+
+    get isShielding(): boolean {
+        return this.run.shielding && this.run.phase === 'playing' && CHARACTERS[this.run.characterId].canShield === true;
+    }
+    setShielding(held: boolean): void {
+        this.run.shielding = held && this.run.phase === 'playing' && CHARACTERS[this.run.characterId].canShield === true;
+        this.visual.setDefending(this.isShielding);
     }
 
     get facing(): -1 | 1 { return this.facingDirection; }
@@ -38,14 +47,16 @@ export class Player {
             this.facingDirection = actions.left ? -1 : 1;
             this.visual.setFacing(this.facingDirection);
         }
-        if (actions.left) this.sprite.x -= this.run.moveSpeed * dt;
-        if (actions.right) this.sprite.x += this.run.moveSpeed * dt;
+        const speed = this.run.moveSpeed * (this.isShielding ? SHIELD.movementMultiplier : 1);
+        if (actions.left) this.sprite.x -= speed * dt;
+        if (actions.right) this.sprite.x += speed * dt;
         this.sprite.x = Math.max(BALANCE.player.minX, this.sprite.x);
         if (actions.jump && this.run.onGround) { this.run.velocityY = BALANCE.player.jumpVelocity; this.run.onGround = false; }
         if (!this.run.onGround) { this.run.velocityY += BALANCE.player.gravity * dt; this.sprite.y += this.run.velocityY * dt; }
         if (this.sprite.y >= this.groundY - BALANCE.player.groundOffset) {
             this.sprite.y = this.groundY - BALANCE.player.groundOffset; this.run.velocityY = 0; this.run.onGround = true;
         }
+        this.visual.setDefending(this.isShielding);
         this.visual.update(this.run, this.sprite.x !== previousX);
     }
 }
