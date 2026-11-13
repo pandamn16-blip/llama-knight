@@ -20,6 +20,7 @@ export class CombatSystem {
     private tweens = new Set<Phaser.Tweens.Tween>();
     private slashes = new Set<Phaser.GameObjects.Container | Phaser.GameObjects.Sprite>();
     private fireTicks = new Set<Phaser.GameObjects.Text>();
+    private damageTicks = new Set<Phaser.GameObjects.Text>();
     private terrain?: Pick<WorldSystem, 'terrainImpact'>;
 
     setTerrain(terrain: Pick<WorldSystem, 'terrainImpact'>): void { this.terrain = terrain; }
@@ -52,25 +53,9 @@ export class CombatSystem {
 
     resolvePyromancerFireContact(): void {
         if (this.run.phase !== 'playing' || !this.archers?.playerStandingOnPyromancer()) return;
-        // Standing inside the flame hurts, respecting the standard invulnerability
-        // window. Only a successful damage tick produces a red number.
-        const damage = 1;
-        if (this.takeDamage(damage)) {
-            const tick = this.scene.add.text(this.player.x, this.player.y - 52,
-                `-${damage}`, { fontSize: '25px', color: '#ff3030',
-                    fontStyle: 'bold', stroke: '#530808', strokeThickness: 4 })
-                .setOrigin(0.5).setDepth(12).setScrollFactor(1);
-            this.fireTicks.add(tick);
-            const tween = this.scene.tweens.add({
-                targets: tick, y: tick.y - 30, alpha: 0, duration: 650,
-                onComplete: () => {
-                    tick.destroy();
-                    this.fireTicks.delete(tick);
-                    this.tweens.delete(tween);
-                }
-            });
-            this.tweens.add(tween);
-        }
+        // All successful hits share the same floating-number effect.
+        // Fire contact uses the ordinary player damage cooldown.
+        this.takeDamage(1, true);
     }
 
     resolveArcherArrow(sourceDirection: -1 | 1): void {
@@ -201,10 +186,17 @@ export class CombatSystem {
     }
 
     private hitTarget(target: Enemy | Archer | Crate, damage: number): void {
+        const previousHp = target.hp;
+        const { x, y } = target.sprite;
         if ('placement' in target) this.structures?.damageCrate(target, damage);
         else if ('kind' in target && target.kind === 'archer') {
             this.archers?.damage(target, damage);
         } else this.hitEnemy(target as Enemy, damage);
+        // Display actual health removed, including overkill and finishing blows.
+        // Invulnerable/ignored targets produce no floating damage number.
+        const actual = Math.max(0, previousHp - Math.max(0, target.hp));
+        if (actual > 0) this.showDamageNumber(actual, x, y,
+            'placement' in target ? 'crate' : 'enemy');
     }
 
     private hitEnemy(enemy: Enemy, damage: number): void {
@@ -223,6 +215,31 @@ export class CombatSystem {
         }
     }
 
+    private showDamageNumber(amount: number, x: number, y: number,
+        target: 'player' | 'enemy' | 'crate', fire = false): void {
+        if (amount <= 0) return;
+        const tick = this.scene.add.text(x, y - (target === 'player' ? 52 : 44),
+            `-${amount}`, {
+                fontSize: '25px',
+                color: target === 'player' ? '#ff3030' : target === 'enemy' ? '#ffe28a' : '#ffffff',
+                fontStyle: 'bold',
+                stroke: target === 'player' ? '#530808' : '#42301a',
+                strokeThickness: 4
+            }).setOrigin(0.5).setDepth(12).setScrollFactor(1);
+        this.damageTicks.add(tick);
+        if (fire) this.fireTicks.add(tick);
+        const tween = this.scene.tweens.add({
+            targets: tick, y: tick.y - 30, alpha: 0, duration: 650,
+            onComplete: () => {
+                tick.destroy();
+                this.damageTicks.delete(tick);
+                this.fireTicks.delete(tick);
+                this.tweens.delete(tween);
+            }
+        });
+        this.tweens.add(tween);
+    }
+
     private blockImpact(): void {
         const effect = this.scene.add.container(this.player.x + this.player.facing * 38, this.player.y).setDepth(9).setScrollFactor(1);
         effect.add([
@@ -236,11 +253,13 @@ export class CombatSystem {
         this.tweens.add(tween);
     }
 
-    private takeDamage(amount = 1): boolean {
+    private takeDamage(amount = 1, fire = false): boolean {
         if (this.run.phase !== 'playing') return false;
         if ((this.run.runTime * 1000) - this.run.lastDamage < BALANCE.player.damageCooldown) return false;
         this.run.lastDamage = (this.run.runTime * 1000);
+        const actual = Math.min(amount, Math.max(0, this.run.health));
         this.run.health -= amount;
+        this.showDamageNumber(actual, this.player.x, this.player.y, 'player', fire);
         this.player.showHurt();
         this.onDamage();
         this.scene.cameras.main.shake(BALANCE.effects.shakeDuration, BALANCE.effects.shakeIntensity);
@@ -257,7 +276,8 @@ export class CombatSystem {
         for (const timer of this.timers) timer.remove(false);
         for (const tween of this.tweens) tween.remove();
         for (const slash of this.slashes) if (slash.active) slash.destroy();
-        for (const tick of this.fireTicks) if (tick.active) tick.destroy();
+        for (const tick of this.damageTicks) if (tick.active) tick.destroy();
+        this.damageTicks.clear();
         this.fireTicks.clear();
         for (const shot of this.projectiles) if (shot.sprite.active) shot.sprite.destroy();
         this.projectiles = [];
