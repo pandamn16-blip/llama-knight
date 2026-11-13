@@ -10,6 +10,8 @@ export const ARCHER = {
     // Combined centre separation for the Pyromancer body and playable character.
     // The previous 42px let the player visibly penetrate the wide pancake stack.
     contactWidth: 68,
+    standHeight: 84, standHalfWidth: 47,
+    fireContactDamage: 1,
     fireballScale: 0.27, fireballSpawnX: 60, fireballSpawnY: -38,
     deathDuration: 0.78
 } as const;

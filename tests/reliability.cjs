@@ -2694,3 +2694,81 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     sys.destroy(); g.events.emit('shutdown');
     console.log('PASS Pyromancer non-lethal damage fade, refresh and cleanup.');
 }
+
+
+// Living enemy heads are one-way landing platforms. Bread does not deal
+// passive contact damage, but can reach a rider with an active melee attack.
+// Pyromancer fire contact uses the existing invulnerability cooldown.
+{
+    const { game: g } = fixture();
+    const { Player } = load('entities/Player');
+    const { EnemySystem } = load('systems/EnemySystem');
+    const { ArcherSystem } = load('systems/ArcherSystem');
+    const { BREAD } = load('enemies/bread');
+    const { ARCHER } = load('config/archers');
+    const { BALANCE } = load('config/balance');
+    const breadSystem = new EnemySystem(g, g.run, g.groundY);
+    const bread = breadSystem.spawnBread(600);
+    const breadTop = bread.sprite.y - BREAD.standHeight;
+    assert.equal(breadSystem.landingY(bread.sprite.x, breadTop - 5, breadTop + 10), breadTop);
+    assert.equal(breadSystem.landingY(bread.sprite.x + 100, breadTop - 5, breadTop + 10),
+        undefined, 'Bread landing needs horizontal overlap');
+    assert.equal(breadSystem.landingY(bread.sprite.x, breadTop + 10, breadTop - 5),
+        undefined, 'No solid underside when jumping up');
+    const player = new Player(g, g.run, g.groundY);
+    player.sprite.x = bread.sprite.x;
+    player.sprite.y = breadTop - BALANCE.player.groundOffset - 5;
+    g.run.onGround = false; g.run.velocityY = 120;
+    const surfaces = { landingY: (x, from, to) => breadSystem.landingY(x, from, to),
+        standingY: (x, foot) => breadSystem.standingY(x, foot) };
+    player.update({ left: false, right: false, jump: false }, 0.05,
+        (from, to) => to, surfaces);
+    assert.equal(player.y + BALANCE.player.groundOffset, breadTop);
+    assert.equal(g.run.onGround, true, 'The player lands on a Bread head');
+    const hp = g.run.health;
+    breadSystem.update(0.02, () => {});
+    assert.equal(g.run.health, hp, 'Standing on Bread is not passive damage');
+    g.combatSystem.player = player;
+    bread.brain.state = 'active'; bread.brain.remaining = 0.1;
+    assert.equal(g.combatSystem.resolveEnemyAttack(bread), true,
+        'Bread melee can attack the player standing above it');
+    assert.equal(g.run.health, hp - bread.damage);
+    breadSystem.damage(bread, 999);
+    assert.equal(breadSystem.standingY(bread.sprite.x, breadTop), undefined,
+        'Dead Bread cannot support the player');
+    breadSystem.destroy();
+
+    const fire = new ArcherSystem(g, g.run, g.groundY, g.player, () => {}, () => {});
+    const perch = generateSection(1, g.run.seed).platforms[3];
+    g.cameras.main.setScroll(perch.x - 700, 0);
+    fire.prepare();
+    const pyro = fire.archers[0];
+    assert.ok(pyro);
+    const pyroTop = pyro.sprite.y - ARCHER.standHeight;
+    assert.equal(fire.landingY(pyro.sprite.x, pyroTop - 4, pyroTop + 4), pyroTop);
+    assert.equal(fire.landingY(pyro.sprite.x, pyroTop + 5, pyroTop - 4), undefined);
+    g.player.x = pyro.sprite.x;
+    g.player.y = pyroTop - BALANCE.player.groundOffset;
+    assert.equal(fire.playerStandingOnPyromancer(), true);
+    g.combatSystem.archers = fire;
+    g.run.lastDamage = -1000;
+    g.run.runTime = 0;
+    const beforeBurn = g.run.health;
+    g.combatSystem.resolvePyromancerFireContact();
+    assert.equal(g.run.health, beforeBurn - 1, 'Pyromancer burns a rider');
+    g.run.runTime = 0.5;
+    g.combatSystem.resolvePyromancerFireContact();
+    assert.equal(g.run.health, beforeBurn - 1, 'Cooldown prevents per-frame burning');
+    g.run.runTime = 1;
+    g.combatSystem.resolvePyromancerFireContact();
+    assert.equal(g.run.health, beforeBurn - 2, 'Fire burns again after cooldown');
+    g.player.x += 100;
+    assert.equal(fire.playerStandingOnPyromancer(), false);
+    g.run.runTime = 2;
+    g.combatSystem.resolvePyromancerFireContact();
+    assert.equal(g.run.health, beforeBurn - 2, 'No burning after leaving the enemy');
+    fire.damage(pyro, 999);
+    assert.equal(fire.standingY(pyro.sprite.x, pyroTop), undefined);
+    fire.destroy(); g.events.emit('shutdown');
+    console.log('PASS enemy standing: Bread head landing, harmless contact, active upward attack, Pyromancer fire with cooldown.');
+}

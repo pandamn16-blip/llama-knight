@@ -29,12 +29,24 @@ export class CombatSystem {
 
     resolveEnemyAttack(enemy: Enemy): boolean {
         if (this.run.phase !== 'playing' || enemy.hp <= 0 || enemy.brain.state !== 'active' || enemy.brain.remaining <= 0) return false;
+        const standingOnHead = this.enemySystem.isPlayerStandingOn(enemy, this.player.x, this.player.y);
         const dx = (this.player.x - enemy.sprite.x) * enemy.brain.facing;
-        if (dx < 0 || dx > BREAD.attackRange || Math.abs(enemy.sprite.y - this.player.y) > BREAD.attackHeight) return false;
+        if (!standingOnHead && (dx < 0 || dx > BREAD.attackRange ||
+            Math.abs(enemy.sprite.y - this.player.y) > BREAD.attackHeight)) return false;
         const sourceDirection = Math.sign(enemy.sprite.x - this.player.x) || -enemy.brain.facing;
-        if (this.player.isShielding && sourceDirection === this.player.facing) this.blockImpact();
+        // An overhead Bread attack reaches a rider; horizontal shielding does
+        // not block a strike coming from directly underneath.
+        if (!standingOnHead && this.player.isShielding && sourceDirection === this.player.facing)
+            this.blockImpact();
         else this.takeDamage(enemy.damage);
         return true;
+    }
+
+    resolvePyromancerFireContact(): void {
+        if (this.run.phase !== 'playing' || !this.archers?.playerStandingOnPyromancer()) return;
+        // Standing on a flame is hazardous even without a bonk animation.
+        // takeDamage enforces the existing 950ms invulnerability window.
+        this.takeDamage(1);
     }
 
     resolveArcherArrow(sourceDirection: -1 | 1): void {

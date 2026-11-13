@@ -28,6 +28,37 @@ export class EnemySystem {
 
     get enemies(): readonly Enemy[] { return this.items; }
 
+    private topY(enemy: Enemy): number { return enemy.sprite.y - BREAD.standHeight; }
+
+    isPlayerStandingOn(enemy: Enemy, playerX: number, playerY: number): boolean {
+        return enemy.hp > 0 && enemy.sprite.active &&
+            Math.abs(playerX - enemy.sprite.x) <= BREAD.standHalfWidth &&
+            Math.abs(playerY + BALANCE.player.groundOffset - this.topY(enemy)) < 3;
+    }
+
+    landingY(x: number, previousFoot: number, nextFoot: number): number | undefined {
+        if (nextFoot < previousFoot) return undefined;
+        let landing: number | undefined;
+        for (const enemy of this.items) {
+            if (enemy.hp <= 0 || !enemy.sprite.active ||
+                Math.abs(x - enemy.sprite.x) > BREAD.standHalfWidth) continue;
+            const top = this.topY(enemy);
+            if (previousFoot <= top + 1 && nextFoot >= top &&
+                (landing === undefined || top < landing)) landing = top;
+        }
+        return landing;
+    }
+
+    standingY(x: number, foot: number): number | undefined {
+        for (const enemy of this.items) {
+            if (enemy.hp <= 0 || !enemy.sprite.active ||
+                Math.abs(x - enemy.sprite.x) > BREAD.standHalfWidth) continue;
+            const top = this.topY(enemy);
+            if (Math.abs(foot - top) < 3) return top;
+        }
+        return undefined;
+    }
+
     // Sweep the requested movement so fast steps cannot pass through a living body.
     // Contact dimensions are gameplay values, independent of sprite scale/animation.
     resolvePlayerMovement(from: number, to: number, y: number): number {
@@ -122,6 +153,7 @@ export class EnemySystem {
         const dx = player.x - enemy.sprite.x, distance = Math.abs(dx);
         const closeHeight = Math.abs(player.y - enemy.sprite.y);
         const homeDistance = Math.abs(enemy.sprite.x - enemy.placementX);
+        const playerOnTop = this.isPlayerStandingOn(enemy, player.x, player.y);
         if (['idle', 'patrol', 'return'].includes(brain.state) && distance <= BREAD.detectionRange &&
             closeHeight <= BREAD.detectionHeight && (brain.state !== 'return' || homeDistance <= BREAD.patrolDistance)) brain.state = 'chase';
         if (brain.state === 'chase' && (distance > BREAD.loseRange || homeDistance > BREAD.territoryLeash)) brain.state = 'return';
@@ -141,7 +173,7 @@ export class EnemySystem {
                 break;
             case 'chase':
                 brain.facing = dx < 0 ? -1 : 1;
-                if (distance <= BREAD.meleeStop && closeHeight <= BREAD.attackHeight) {
+                if (distance <= BREAD.meleeStop && (closeHeight <= BREAD.attackHeight || playerOnTop)) {
                     brain.state = 'windup'; brain.remaining = BREAD.windup;
                 } else this.move(enemy, player.x, enemy.speed, dt);
                 break;
@@ -170,6 +202,8 @@ export class EnemySystem {
     }
 
     private move(enemy: Enemy, target: number, speed: number, dt: number): boolean {
+        // Keep a player riding on top from being dropped by a patrolling body.
+        if (this.player && this.isPlayerStandingOn(enemy, this.player.x, this.player.y)) return false;
         const dx = target - enemy.sprite.x;
         if (dx !== 0) enemy.brain.facing = dx < 0 ? -1 : 1;
         const from = enemy.sprite.x;
