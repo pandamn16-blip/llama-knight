@@ -10,8 +10,9 @@ export const ARCHER = {
     // Combined centre separation for the Pyromancer body and playable character.
     // The previous 42px let the player visibly penetrate the wide pancake stack.
     contactWidth: 68,
-    // Fire crown/body top, measured relative to the world-space archer container.
-    standHeight: 69, standHalfWidth: 41,
+    // Land on the pancake stack below the flame crown, so the player
+    // stands visibly inside the fire. Relative to the archer's world origin.
+    standHeight: 30, standHalfWidth: 41,
     fireContactDamage: 1,
     fireballScale: 0.27, fireballSpawnX: 60, fireballSpawnY: -38,
     deathDuration: 1.6
