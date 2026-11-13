@@ -2523,3 +2523,79 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     assert.equal(pyro.PYROMANCER_DEATH.scale, pyro.PYROMANCER_IDLE.scale);
     console.log('PASS Pyromancer combat: original attack/bonk/death/fireball sheets and animation contracts.');
 }
+
+
+// Render-capable mock verifies actual attack selection, bonk/shot exclusivity,
+// projectile survival after a one-shot animation, and death follow-through.
+{
+    const { game: g } = fixture();
+    const pyro = load('enemies/pyromancer');
+    const { ArcherSystem } = load('systems/ArcherSystem');
+    const { ARCHER } = load('config/archers');
+    const sheets = [pyro.PYROMANCER_IDLE, pyro.PYROMANCER_RUN, pyro.PYROMANCER_ATTACK,
+        pyro.PYROMANCER_BONK, pyro.PYROMANCER_DEATH, pyro.PYROMANCER_FIREBALL];
+    const dimensions = new Map(sheets.map(sheet => [sheet.key, sheet]));
+    g.textures = {
+        exists(key) { return dimensions.has(key); },
+        get(key) {
+            const source = dimensions.get(key);
+            return {
+                getSourceImage() { return { width: source.width, height: source.height }; },
+                has(frame) { return +frame >= 0 && +frame <= 5; },
+                get() { return { width: 256, height: 256 }; }
+            };
+        }
+    };
+    g.anims = { exists: key => sheets.some(sheet => sheet.animationKey === key) };
+    g.add.sprite = (x, y, key) => {
+        const spr = g.add.container(x, y);
+        spr.textureKey = key;
+        spr.anims = { isPlaying: false, pause() { this.paused = true; },
+            resume() { this.paused = false; } };
+        spr.play = function(key) { this.played = key; this.anims.isPlaying = true; return this; };
+        spr.setFlipX = function(value) { this.flipX = value; return this; };
+        return spr;
+    };
+    const hits = [], kills = [];
+    const archers = new ArcherSystem(g, g.run, g.groundY, g.player,
+        from => hits.push(from), (x, y) => kills.push([x, y]));
+    const perch = generateSection(1, g.run.seed).platforms[3];
+    g.cameras.main.setScroll(perch.x - 700, 0);
+    g.player.x = perch.x - 165; g.player.y = g.groundY - perch.height - ARCHER.footOffset;
+    archers.prepare();
+    const actor = archers.archers[0];
+    assert.equal(actor.art.played, pyro.PYROMANCER_IDLE.animationKey);
+    archers.update(0.02);
+    assert.equal(actor.art.played, pyro.PYROMANCER_ATTACK.animationKey, 'Ranged tell plays casting');
+    archers.update(ARCHER.aimDuration + 0.01);
+    assert.equal(archers.arrows.length, 1, 'Casting releases exactly one projectile');
+    const shot = archers.arrows[0].sprite;
+    assert.equal(shot.played, pyro.PYROMANCER_FIREBALL.animationKey);
+    shot.anims.isPlaying = false; // Animation finished; last frame remains until impact.
+    archers.update(0.01);
+    assert.equal(shot.active, true, 'Fireball persists after its last animation frame');
+    assert.equal(archers.arrows[0].sprite, shot);
+    assert.equal(actor.art.played, pyro.PYROMANCER_IDLE.animationKey, 'Returns to idle');
+
+    // A separate Pyromancer starts a melee animation but does not cast a fireball.
+    g.cameras.main.setScroll(14000, 0); archers.prepare();
+    g.cameras.main.setScroll(perch.x - 700, 0); archers.prepare();
+    const bonker = archers.archers[0];
+    g.player.x = bonker.sprite.x - 38; g.player.y = bonker.sprite.y;
+    bonker.state = 'watch';
+    archers.update(0.01);
+    assert.equal(bonker.art.played, pyro.PYROMANCER_BONK.animationKey, 'Close attack plays bonk');
+    const shotsBefore = archers.arrows.length;
+    archers.update(ARCHER.contactWindup + 0.01);
+    assert.equal(archers.arrows.length, shotsBefore, 'Bonk never launches a projectile');
+    assert.ok(hits.length > 0, 'Bonk can damage the player');
+
+    assert.equal(archers.damage(bonker, ARCHER.hp), true);
+    assert.equal(kills.length, 1, 'Defeat reward triggers once');
+    assert.equal(bonker.art.played, pyro.PYROMANCER_DEATH.animationKey, 'Death anim plays');
+    assert.equal(bonker.sprite.active, true, 'Death art remains visible briefly');
+    archers.update(ARCHER.deathDuration + 0.01);
+    assert.equal(bonker.sprite.active, false, 'Death art is cleaned up');
+    archers.destroy(); g.events.emit('shutdown');
+    console.log('PASS Pyromancer game combat: casting, persistent fireball, bonk without shot and death animation.');
+}
