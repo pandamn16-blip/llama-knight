@@ -25,7 +25,10 @@ export const PYROMANCER_RUN = {
 } as const;
 export const PYROMANCER_ATTACK = {
     ...character, key: 'pyromancer:attack', animationKey: 'pyromancer:attack',
-    path: 'enemies/pyromancer-pancake/attack.png', fps: 9, repeat: 0
+    path: 'enemies/pyromancer-pancake/attack.png', fps: 9, repeat: 0,
+    // The imported attack sheet was packed at ~130px character height, vs ~200px idle.
+    // Scale just this state so the character stays the same apparent size.
+    scale: 0.74
 } as const;
 export const PYROMANCER_BONK = {
     ...character, key: 'pyromancer:bonk', animationKey: 'pyromancer:bonk',
@@ -38,6 +41,8 @@ export const PYROMANCER_DEATH = {
 export const PYROMANCER_FIREBALL = {
     ...character, key: 'pyromancer:fireball', animationKey: 'pyromancer:fireball',
     path: 'enemies/pyromancer-pancake/fireball.png', fps: 12, repeat: 0,
+    end: 4, impactFrame: 5,
+    // Frames 0–4 animate while airborne, then frame 4 holds; frame 5 is impact-only.
     scale: 0.27
 } as const;
 
