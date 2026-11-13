@@ -9,6 +9,7 @@ export const BREAD = {
     meleeStop: 60, attackRange: 82, attackHeight: 52,
     windup: 0.35, active: 0.1, recovery: 0.9, animationLead: 0.2,
     activationMargin: 160, deathDuration: 0.5,
+    standHeight: 65, standHalfWidth: 34,
     scale: 0.36, originX: 0.5, originY: 0.875, offsetX: 0, offsetY: 32
 } as const;
 
