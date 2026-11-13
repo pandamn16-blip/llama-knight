@@ -30,9 +30,9 @@ export class XpSystem {
         this.onLevelUp();
     }
 
-    dropGem(x: number, y: number) {
+    dropGem(x: number, y: number, value: number = BALANCE.xp.gemValue) {
         if (this.run.phase !== 'playing') return;
-        this.createGem(x, y, BALANCE.xp.gemValue);
+        this.createGem(x, y, value);
     }
 
     private createGem(x: number, y: number, value: number, id = this.nextGemId++): void {
@@ -76,7 +76,12 @@ export class XpSystem {
         const gem = this.gems[index];
         gem.sprite.destroy();
         this.gems.splice(index, 1);
-        this.run.xp += gem.value;
+        this.award(gem.value);
+    }
+
+    award(value: number): void {
+        if (this.run.phase !== 'playing') return;
+        this.run.xp += value;
         this.checkLevelUp();
         this.onChanged();
     }

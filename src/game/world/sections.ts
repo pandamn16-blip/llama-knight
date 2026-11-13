@@ -1,5 +1,6 @@
 import { WORLD } from '../config/world';
 import { BALANCE } from '../config/balance';
+import { STRUCTURES } from '../config/structures';
 
 // Plain section data: generating the same index/seed never depends on travel order.
 export interface WorldSection {
@@ -10,10 +11,16 @@ export interface WorldSection {
     seed: number;
     sceneryXs: number[];
     enemies: BreadPlacement[];
+    structures: StructurePlacement[];
 }
 
 // Content identity is separate from position, so later layouts may place different
 // occupants at the same X without sharing their saved state.
+export interface CratePlacement { id: string; kind: 'crate'; x: number; healthDrop: boolean }
+export type ChestReward = 'xp' | 'heal' | 'upgrade';
+export interface ChestPlacement { id: string; kind: 'chest'; x: number; reward: ChestReward }
+export type StructurePlacement = CratePlacement | ChestPlacement;
+
 export interface BreadPlacement { id: string; kind: 'bread'; x: number }
 
 export function breadPlacementId(runSeed: number, x: number): string {
@@ -39,8 +46,23 @@ export function generateSection(index: number, runSeed: number): WorldSection {
     for (let x = WORLD.enemyStartX + first * WORLD.enemySpacing; x < endX; x += WORLD.enemySpacing) {
         enemies.push({ id: breadPlacementId(runSeed, x), kind: 'bread', x });
     }
+    const structures: StructurePlacement[] = STRUCTURES.crate.offsets.map((offset, slot) => ({
+        id: `${runSeed >>> 0}:${index}:crate:${slot}`, kind: 'crate',
+        x: startX + offset + (index === 0 && slot === 0 ? 0 :
+            sectionSeed(runSeed ^ 0x43524154, index * 2 + slot) % (2 * STRUCTURES.crate.jitter + 1) - STRUCTURES.crate.jitter),
+        healthDrop: sectionSeed(runSeed ^ 0x4845414c, index * 2 + slot) / 0x100000000 < STRUCTURES.crate.healthDropChance
+    }));
+    if (index === 0 || index % STRUCTURES.chest.everySections === 0) {
+        const rewards: ChestReward[] = ['xp', 'heal', 'upgrade'];
+        const roll = sectionSeed(runSeed ^ 0x43484553, index);
+        structures.push({ id: `${runSeed >>> 0}:${index}:chest:0`, kind: 'chest',
+            x: index === 0 ? STRUCTURES.chest.firstX : startX + STRUCTURES.chest.offset +
+                roll % (2 * STRUCTURES.chest.jitter + 1) - STRUCTURES.chest.jitter,
+            reward: index === 0 ? 'upgrade' : rewards[sectionSeed(runSeed ^ 0x52455744, index) % rewards.length]
+        });
+    }
     return { id: `${runSeed >>> 0}:${index}`, index, startX, endX,
-        seed: sectionSeed(runSeed, index), sceneryXs, enemies };
+        seed: sectionSeed(runSeed, index), sceneryXs, enemies, structures };
 }
 
 export function sectionWindow(scrollX: number, width: number, viewports: number): { first: number; last: number } {

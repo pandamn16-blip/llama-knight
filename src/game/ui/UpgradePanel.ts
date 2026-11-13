@@ -4,7 +4,7 @@ import { isMobileLayout, onLayoutResize } from './layout';
 
 // Rendering only: the scene owns offers, keyboard input, validation and effects.
 export function createUpgradePanel(
-    scene: Scene, level: number, options: readonly Upgrade[], onChoose: (index: number) => void, rosieLine?: string
+    scene: Scene, level: number, options: readonly Upgrade[], onChoose: (index: number) => void, rosieLine?: string, heading = `LEVEL ${level}!`
 ) {
     const panel = scene.add.container(0, 0).setDepth(100).setScrollFactor(0);
     const draw = () => {
@@ -12,7 +12,7 @@ export function createUpgradePanel(
         const { width, height } = scene.scale;
         const mobile = isMobileLayout();
         panel.add(scene.add.rectangle(width / 2, height / 2, width, height, 0x151527, 0.91));
-        panel.add(scene.add.text(width / 2, mobile ? 116 : height * 0.20, `LEVEL ${level}!`, {
+        panel.add(scene.add.text(width / 2, mobile ? 116 : height * 0.20, heading, {
             fontSize: mobile ? '44px' : '36px', fontStyle: 'bold', color: '#ffe0a2'
         }).setOrigin(0.5));
         panel.add(scene.add.text(width / 2, mobile ? 178 : height * 0.29, 'CHOOSE ONE UPGRADE', {

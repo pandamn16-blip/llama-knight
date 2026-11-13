@@ -66,3 +66,9 @@ html, body {
 }
 
 #app:fullscreen { width: 100%; height: 100dvh; }
+
+/* Use the same mobile decision as Phaser, even if Safari's pointer queries differ.
+   Keep real notch/home-indicator padding; colour the exposed safe-area gutters. */
+html[data-game-mobile="true"],
+html[data-game-mobile="true"] body,
+html[data-game-mobile="true"] #app { background-color: #b9d9e8; }

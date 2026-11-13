@@ -8,7 +8,7 @@ type TouchAction = keyof PlayerActions;
 
 export class PlayerInput {
     private cursors: Types.Input.Keyboard.CursorKeys;
-    private keys: Record<'A' | 'D' | 'W' | 'J' | 'R' | 'M' | 'ONE' | 'TWO' | 'THREE', Input.Keyboard.Key>;
+    private keys: Record<'A' | 'D' | 'W' | 'J' | 'R' | 'M' | 'E' | 'ONE' | 'TWO' | 'THREE', Input.Keyboard.Key>;
     private touches: Record<TouchAction, Set<number>> = {
         left: new Set(), right: new Set(), jump: new Set(), attack: new Set()
     };
@@ -18,7 +18,7 @@ export class PlayerInput {
     constructor(private scene: Scene, private isPlaying: () => boolean) {
         const { width, height } = scene.scale;
         this.cursors = scene.input.keyboard!.createCursorKeys();
-        this.keys = scene.input.keyboard!.addKeys('A,D,W,J,R,M,ONE,TWO,THREE') as typeof this.keys;
+        this.keys = scene.input.keyboard!.addKeys('A,D,W,J,R,M,E,ONE,TWO,THREE') as typeof this.keys;
         scene.input.keyboard!.addCapture(['SPACE', 'UP', 'DOWN', 'LEFT', 'RIGHT']);
 
         const mobile = isMobileLayout();
@@ -72,6 +72,10 @@ export class PlayerInput {
         const jump = this.cursors.up.isDown || this.cursors.space.isDown || this.keys.W.isDown || this.touches.jump.size > 0;
         const attack = this.keys.J.isDown || this.touches.attack.size > 0;
         return { left, right, jump, attack };
+    }
+
+    interactPressed(): boolean {
+        return this.isPlaying() && Input.Keyboard.JustDown(this.keys.E);
     }
 
     restartPressed(): boolean {

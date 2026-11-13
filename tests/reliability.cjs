@@ -75,6 +75,10 @@ const { breadPlacementId, generateSection, sectionSeed } = load('world/sections'
 const { Game } = load('scenes/Game');
 const { EnemySystem } = load('systems/EnemySystem');
 const { CombatSystem } = load('systems/CombatSystem');
+const { StructureSystem } = load('systems/StructureSystem');
+const { HealthPickupSystem } = load('systems/HealthPickupSystem');
+const { STRUCTURES } = load('config/structures');
+const { RewardNotice } = load('ui/RewardNotice');
 const { XpSystem } = load('systems/XpSystem');
 const { Rosie } = load('world/Rosie');
 
@@ -143,15 +147,21 @@ function fixture(characterId = 'llamaCrunch') {
     game.run.startX = game.run.furthestX = game.player.x;
     game.playerInput = {
         clearTouch() {}, clearAll() {}, readActions: () => ({ left: false, right: false, jump: false, attack: false }),
-        restartPressed: () => false, menuPressed: () => false, upgradeChoice: () => undefined
+        interactPressed: () => false, restartPressed: () => false, menuPressed: () => false, upgradeChoice: () => undefined
     };
     game.hud = { update() {} };
     game.worldCamera = new WorldCamera(game.cameras.main, game.scale.height);
     game.world = new WorldSystem(game, game.run.seed, game.groundY);
     game.enemySystem = new EnemySystem(game, game.run, game.groundY);
     game.xpSystem = new XpSystem(game, game.run, game.player, () => game.openLevelUp(), () => game.updateHud());
+    game.healthPickups = new HealthPickupSystem(game, game.run, game.player, () => game.updateHud());
+    game.rewardNotice = new RewardNotice(game);
+    game.structures = new StructureSystem(game, game.run, game.groundY, (placement, x, y) => {
+        game.xpSystem.dropGem(x, y, STRUCTURES.crate.xp);
+        if (placement.healthDrop) game.healthPickups.drop(`${placement.id}:health`, x, y);
+    }, game.player, reward => game.claimChestReward(reward));
     game.combatSystem = new CombatSystem(game, game.run, game.player, game.enemySystem,
-        (x, y) => game.xpSystem.dropGem(x, y), () => game.endGame(), () => game.updateHud(), () => game.rosie.speak('damage'));
+        (x, y) => game.xpSystem.dropGem(x, y), () => game.endGame(), () => game.updateHud(), () => game.rosie.speak('damage'), game.structures);
     const rosie = new Rosie(game, game.run);
     game.rosie = rosie;
     function advance(ms) {
@@ -1938,7 +1948,7 @@ for (let cycle = 0; cycle < 10; cycle++) {
     assert.equal(cards.length, 1); assert.equal(cards[0].x, 831); assert.equal(cards[0].scrollFactorX, 0);
     cards[0].emit('pointerdown'); assert.equal(chosen, 0);
     panel.destroy();
-    assert.ok(!objects.some(object => object.active && object.eventNames().includes('pointerdown')));
+    assert.ok(!objects.some(object => object.active && object.visible !== false && object.eventNames().includes('pointerdown')));
     g.events.emit('shutdown'); assert.equal(g.scale.listenerCount('resize'), 0);
 }
 mobileLayout = false;
@@ -1961,3 +1971,173 @@ console.log('PASS mobile UX: aspect-preserving viewport sizing, independent joys
     delete documentStub.fullscreenEnabled; delete documentStub.fullscreenElement; delete parentElement.requestFullscreen;
     mobileLayout = false;
 }
+
+
+// Handheld Safari/Android still use the full usable viewport when pointer queries differ.
+{
+    const { isMobileLayout, viewportWidth } = load('ui/layout');
+    mobileLayout = false;
+    windowStub.navigator = { maxTouchPoints: 5, userAgent: 'Mozilla/5.0 (iPhone)' };
+    assert.equal(isMobileLayout(), true);
+    assert.equal(viewportWidth(750, 369, isMobileLayout()), 1561);
+    windowStub.navigator = { maxTouchPoints: 0, userAgent: 'Mozilla/5.0 (Macintosh)' };
+    assert.equal(isMobileLayout(), false);
+    delete windowStub.navigator;
+}
+
+// Adventure Stage 2B: both weapons use their existing geometry/cooldowns against crates.
+{
+    const { game: g } = fixture(); g.structures.prepare();
+    const crate = g.structures.crates.find(crate => crate.placement.x === 620);
+    assert.equal(crate.hp, 3); g.player.x = 530;
+    g.combatSystem.attack(); assert.equal(crate.hp, 1); assert.equal(g.run.kills, 0);
+    g.combatSystem.attack(); assert.equal(crate.hp, 1); // same swing/cooldown cannot hit twice
+    g.run.runTime = 0.5; g.combatSystem.attack();
+    assert.equal(g.structures.records.get(crate.placement.id).destroyed, true);
+    assert.equal(g.xpSystem.gems.length, 1); assert.equal(g.run.kills, 0);
+    g.structures.damageCrate(crate, 100); assert.equal(g.xpSystem.gems.length, 1);
+    g.player.x = 620; g.xpSystem.update(0); assert.equal(g.run.xp, 1);
+    g.cameras.main.setScroll(20000, 0); g.structures.prepare();
+    g.cameras.main.setScroll(0, 0); g.structures.prepare();
+    assert.ok(!g.structures.crates.some(item => item.placement.id === crate.placement.id));
+    g.events.emit('shutdown'); assert.equal(g.structures.effects.size, 0);
+}
+{
+    const { game: g } = fixture('candy'); g.structures.prepare(); g.player.x = 500;
+    const crate = g.structures.crates.find(crate => crate.placement.x === 620);
+    const enemy = g.enemySystem.spawnBread(700);
+    for (const [time, expectedHp] of [[0, 2], [0.9, 1], [1.8, 0]]) {
+        g.run.runTime = time; g.combatSystem.attack(); g.combatSystem.update(0.2);
+        assert.equal(crate.hp, expectedHp); assert.equal(enemy.hp, 1);
+        assert.equal(g.combatSystem.projectiles.length, 0, 'Crate impact consumes a non-piercing shot');
+    }
+    assert.equal(g.xpSystem.gems.length, 1); assert.equal(g.run.kills, 0);
+    g.events.emit('shutdown');
+}
+{
+    const { game: g, advance } = fixture(); g.structures.prepare();
+    const [first, second] = g.structures.crates;
+    second.sprite.x = first.sprite.x + 25; g.player.x = first.sprite.x - 60;
+    g.combatSystem.attack(); assert.equal(first.hp, 1); assert.equal(second.hp, 1);
+    g.setPhase('choosingUpgrade'); advance(200); assert.equal(first.sprite.alpha, 0.5);
+    g.setPhase('playing'); advance(100); assert.equal(first.sprite.alpha, 1);
+    g.cameras.main.setScroll(20000, 0); g.structures.prepare();
+    assert.equal(first.sprite.active, false);
+    g.cameras.main.setScroll(0, 0); g.structures.prepare();
+    const restored = g.structures.crates.find(crate => crate.placement.id === first.placement.id);
+    assert.equal(restored.hp, 1); assert.equal(restored.sprite.children.length, 6, 'Wounds/cracks persist');
+    const gems = g.xpSystem.gems.length;
+    g.setPhase('gameOver'); g.structures.damageCrate(restored, 10);
+    assert.equal(restored.hp, 1); assert.equal(g.xpSystem.gems.length, gems);
+    g.events.emit('shutdown'); assert.equal(g.structures.records.size, 0);
+}
+
+// Seeded health rewards persist off-screen, remain available at full health, and collect once.
+{
+    const { game: g } = fixture();
+    let seed = 0;
+    while (!generateSection(0, seed).structures[0].healthDrop) seed++;
+    g.run.seed = seed; g.structures.prepare(); const crate = g.structures.crates[0];
+    const id = `${crate.placement.id}:health`;
+    g.structures.damageCrate(crate, crate.hp); g.player.x = crate.sprite.x;
+    g.healthPickups.update(); assert.equal(g.healthPickups.active.size, 1);
+    assert.equal(g.healthPickups.records.get(id).collected, false);
+    g.cameras.main.setScroll(30000, 0); g.player.x = 30400; g.healthPickups.update();
+    assert.equal(g.healthPickups.active.size, 0);
+    g.cameras.main.setScroll(0, 0); g.player.x = 620; g.run.health--;
+    g.healthPickups.update(); assert.equal(g.run.health, g.run.maxHealth);
+    assert.equal(g.healthPickups.records.get(id).collected, true);
+    g.healthPickups.drop(id, 620, g.player.y); g.run.health--;
+    for (const x of [30000, 0, 30000, 0]) { g.cameras.main.setScroll(x, 0); g.healthPickups.update(); }
+    assert.equal(g.run.health, g.run.maxHealth - 1); assert.equal(g.healthPickups.active.size, 0);
+    g.events.emit('shutdown'); assert.equal(g.healthPickups.records.size, 0);
+}
+
+// New environmental systems keep live objects bounded throughout long travel and round trips.
+{
+    const { game: g, objects } = fixture(); let maximum = 0;
+    for (let index = 0; index < 500; index++) {
+        const x = index * WORLD.sectionLength;
+        g.cameras.main.setScroll(x, 0); g.player.x = x + 400;
+        g.world.update(); g.structures.prepare(); g.structures.prepare();
+        g.healthPickups.drop(`test:${index}`, x + 800, g.player.y); g.healthPickups.update();
+        assert.equal(new Set(g.structures.crates.map(crate => crate.placement.id)).size, g.structures.crates.length);
+        assert.ok(g.structures.crates.length < 12); assert.ok(g.healthPickups.active.size < 8);
+        maximum = Math.max(maximum, objects.filter(object => object.active).length);
+    }
+    assert.ok(maximum < 220); console.log(`PASS structures streaming: 500 sections, maximum ${maximum} live objects including health drops.`);
+    g.events.emit('shutdown');
+}
+console.log('PASS Adventure Stage 2B: deterministic crates, shared sword/projectile hits, unchanged cooldowns, persistent damage/destruction, XP/health once, pause/death guards and cleanup.');
+
+// Stage 2C: first chest is early, free upgrade uses the existing modal, and opens only once.
+{
+    const { game: g } = fixture(); g.run.xp = 2; g.structures.prepare();
+    const placement = generateSection(0, g.run.seed).structures.find(item => item.kind === 'chest');
+    assert.equal(placement.x, 900); assert.equal(placement.reward, 'upgrade');
+    g.player.x = placement.x + STRUCTURES.chest.range + 1;
+    g.structures.update(true); assert.equal(g.structures.opened.size, 0);
+    g.player.x = placement.x; g.player.y -= 200;
+    g.structures.update(true); assert.equal(g.structures.opened.size, 0);
+    g.player.y = g.groundY - 40;
+    g.setPhase('paused'); g.structures.interact(); assert.equal(g.structures.opened.size, 0);
+    g.setPhase('playing'); g.structures.update(); assert.equal(g.structures.prompt.visible, true);
+    g.structures.prompt.emit('pointerdown');
+    assert.equal(g.run.phase, 'choosingUpgrade'); assert.equal(g.run.level, 1); assert.equal(g.run.xp, 2);
+    assert.equal(g.offered.length, 3); assert.equal(g.structures.prompt.visible, false);
+    g.structures.interact(); assert.equal(g.structures.opened.size, 1);
+    const damage = g.run.weapon.damage; g.chooseUpgrade(0);
+    assert.equal(g.run.weapon.damage, damage + 1); assert.equal(g.run.phase, 'playing');
+    g.cameras.main.setScroll(25000, 0); g.structures.prepare();
+    assert.ok(!g.structures.activeChests.has(placement.id));
+    g.cameras.main.setScroll(0, 0); g.structures.prepare(); g.structures.interact();
+    assert.equal(g.run.weapon.damage, damage + 1); assert.equal(g.run.xp, 2);
+    assert.equal(g.structures.activeChests.get(placement.id).sprite.children[2].args[2], 0x342a31);
+    g.events.emit('shutdown'); assert.equal(g.structures.opened.size, 0); assert.equal(g.scale.listenerCount('resize'), 0);
+}
+
+// Seeded later chests cover XP/healing; full-health healing converts to XP without duplicate rewards.
+for (const reward of ['xp', 'heal']) {
+    for (const fullHealth of [false, true]) {
+        const { game: g, advance } = fixture();
+        let seed = 0, placement;
+        do { placement = generateSection(3, seed++).structures.find(item => item.kind === 'chest'); } while (placement.reward !== reward);
+        g.run.seed = seed - 1;
+        assert.equal(JSON.stringify(generateSection(3, g.run.seed).structures.find(item => item.kind === 'chest')), JSON.stringify(placement));
+        g.run.health = fullHealth ? g.run.maxHealth : g.run.maxHealth - 2;
+        g.player.x = placement.x; g.cameras.main.setScroll(placement.x - 400, 0); g.structures.prepare();
+        g.structures.update(true);
+        if (reward === 'heal' && !fullHealth) {
+            assert.equal(g.run.health, g.run.maxHealth); assert.equal(g.run.xp, 0); assert.equal(g.run.level, 1);
+            assert.ok(g.rewardNotice.text.text.includes('+2 HEALTH'));
+        } else {
+            assert.equal(g.run.level, 2); assert.equal(g.run.xp, 0); assert.equal(g.run.phase, 'choosingUpgrade');
+            assert.ok(g.rewardNotice.text.text.includes('+3 XP'));
+            advance(3000); assert.equal(g.rewardNotice.text.visible, true, 'Notice clock pauses with upgrades');
+            g.chooseUpgrade(0);
+        }
+        const snapshot = JSON.stringify(g.run);
+        g.structures.interact(); assert.equal(JSON.stringify(g.run), snapshot);
+        advance(STRUCTURES.chest.noticeMs); assert.equal(g.rewardNotice.text.visible, false);
+        for (const scroll of [0, placement.x - 400, 0, placement.x - 400]) {
+            g.cameras.main.setScroll(scroll, 0); g.structures.prepare(); g.structures.update(true);
+        }
+        assert.equal(JSON.stringify(g.run), snapshot);
+        assert.equal(g.structures.opened.size, 1);
+        g.events.emit('shutdown');
+    }
+}
+
+// Real scene coordination consumes E once and stops remaining substeps when chest UI pauses the run.
+{
+    const { game: g } = explorationFixture();
+    g.player.sprite.x = 900; g.playerInput.keys.E._justDown = true;
+    g.update(0, 250);
+    assert.equal(g.run.phase, 'choosingUpgrade'); assert.equal(g.run.level, 1); assert.equal(g.run.xp, 0);
+    assert.ok(Math.abs(g.run.runTime - 0.05) < 1e-8);
+    assert.equal(g.playerInput.interactPressed(), false);
+    g.chooseUpgrade(0); assert.equal(g.run.phase, 'playing');
+    g.update(0, 16); assert.equal(g.run.phase, 'playing');
+    g.events.emit('shutdown');
+}
+console.log('PASS Stage 2C: deterministic early/later chests, contextual tap/E interaction, free upgrades without levelling, XP/healing rewards, persistent opened state, pause-aware notices and cleanup.');

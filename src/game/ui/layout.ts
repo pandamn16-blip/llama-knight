@@ -2,7 +2,11 @@ import { Scenes } from 'phaser';
 import type { Scene } from 'phaser';
 
 export function isMobileLayout(): boolean {
-    return window.matchMedia('(pointer: coarse)').matches && window.matchMedia('(hover: none)').matches;
+    const touchPointer = window.matchMedia('(pointer: coarse)').matches && window.matchMedia('(hover: none)').matches;
+    // Safari can report different pointer capabilities with desktop-site/accessory settings.
+    const touchDevice = (window.navigator?.maxTouchPoints ?? 0) > 0 &&
+        /iPhone|iPad|iPod|Android|Macintosh/i.test(window.navigator?.userAgent ?? '');
+    return touchPointer || touchDevice;
 }
 
 // Fixed vertical world scale/ground/physics; only the horizontal view expands.

@@ -3,6 +3,7 @@ import { BALANCE } from '../config/balance';
 import type { RunState, RunPhase } from '../state/RunState';
 import type { Player } from '../entities/Player';
 import type { EnemySystem, Enemy } from './EnemySystem';
+import type { StructureSystem, Crate } from './StructureSystem';
 import { WEAPONS } from '../weapons/definitions';
 import { SWORD_SLASH_EFFECT, hasSwordSlashEffect } from '../weapons/slashEffect';
 
@@ -18,7 +19,7 @@ export class CombatSystem {
     constructor(
         private scene: Phaser.Scene, private run: RunState, private player: Player,
         private enemySystem: EnemySystem, private onKill: (x: number, y: number) => void,
-        private onDeath: () => void, private onChanged: () => void, private onDamage: () => void = () => {}
+        private onDeath: () => void, private onChanged: () => void, private onDamage: () => void = () => {}, private structures?: StructureSystem
     ) {
         scene.events.once(Phaser.Scenes.Events.SHUTDOWN, this.destroy, this);
     }
@@ -79,13 +80,14 @@ export class CombatSystem {
                 onComplete: () => { slash.destroy(); this.slashes.delete(slash); this.tweens.delete(tween); } });
             this.tweens.add(tween);
         }
-        for (let i = this.enemySystem.enemies.length - 1; i >= 0; i--) {
-            const enemy = this.enemySystem.enemies[i];
+        const targets = this.targets;
+        for (let i = targets.length - 1; i >= 0; i--) {
+            const enemy = targets[i];
             const dx = (enemy.sprite.x - this.player.x) * direction;
             const dy = enemy.sprite.y - this.player.y;
             // Resolve each enemy once at swing time; the fading arc deals no extra hits.
             if (dx >= 0 && Math.hypot(dx, dy) < range && Math.abs(Math.atan2(dy, dx)) <= halfAngle) {
-                this.hitEnemy(enemy, this.run.weapon.damage);
+                this.hitTarget(enemy, this.run.weapon.damage);
             }
         }
     }
@@ -125,10 +127,10 @@ export class CombatSystem {
             const fromX = shot.sprite.x;
             const step = Math.min(shot.remaining, shot.speed * dt);
             const toX = fromX + step * shot.direction;
-            let target: Enemy | undefined;
+            let target: Enemy | Crate | undefined;
             // Sweep the segment so a fast shot cannot skip a thin enemy between frames.
             // Hit the nearest enemy along the path, regardless of spawn array order.
-            for (const enemy of this.enemySystem.enemies) {
+            for (const enemy of this.targets) {
                 if (Math.abs(enemy.sprite.y - shot.sprite.y) < shot.halfHeight &&
                     enemy.sprite.x + shot.halfWidth >= Math.min(fromX, toX) &&
                     enemy.sprite.x - shot.halfWidth <= Math.max(fromX, toX) &&
@@ -136,13 +138,22 @@ export class CombatSystem {
             }
             shot.sprite.x = toX;
             shot.remaining -= step;
-            if (target) this.hitEnemy(target, shot.damage);
+            if (target) this.hitTarget(target, shot.damage);
             if (target || shot.remaining <= 0 || shot.sprite.x > this.scene.cameras.main.scrollX + this.scene.cameras.main.width + 50 ||
                 shot.sprite.x < this.scene.cameras.main.scrollX - 50) {
                 shot.sprite.destroy();
                 this.projectiles.splice(i, 1);
             }
         }
+    }
+
+    private get targets(): readonly (Enemy | Crate)[] {
+        return this.structures ? [...this.enemySystem.enemies, ...this.structures.crates] : this.enemySystem.enemies;
+    }
+
+    private hitTarget(target: Enemy | Crate, damage: number): void {
+        if ('placement' in target) this.structures?.damageCrate(target, damage);
+        else this.hitEnemy(target, damage);
     }
 
     private hitEnemy(enemy: Enemy, damage: number): void {

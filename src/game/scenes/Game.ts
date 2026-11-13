@@ -21,6 +21,11 @@ import { CombatSystem } from '../systems/CombatSystem';
 import { isCharacterId } from '../characters/definitions';
 import type { CharacterId } from '../characters/definitions';
 import { XpSystem } from '../systems/XpSystem';
+import { StructureSystem } from '../systems/StructureSystem';
+import { HealthPickupSystem } from '../systems/HealthPickupSystem';
+import { RewardNotice } from '../ui/RewardNotice';
+import type { ChestReward } from '../world/sections';
+import { STRUCTURES } from '../config/structures';
 
 export class Game extends Phaser.Scene {
     private selectedCharacter: CharacterId = 'llamaCrunch';
@@ -32,6 +37,9 @@ export class Game extends Phaser.Scene {
     private world!: WorldSystem;
     private enemySystem!: EnemySystem;
     private combatSystem!: CombatSystem;
+    private rewardNotice!: RewardNotice;
+    private structures!: StructureSystem;
+    private healthPickups!: HealthPickupSystem;
     private xpSystem!: XpSystem;
     private groundY = 0;
     private run = createRunState();
@@ -74,8 +82,15 @@ export class Game extends Phaser.Scene {
         this.enemySystem.prepare(); // Before the first gameplay render, including both approach buffers.
         this.xpSystem = new XpSystem(this, this.run, this.player,
             () => this.openLevelUp(), () => this.updateHud());
+        this.healthPickups = new HealthPickupSystem(this, this.run, this.player, () => this.updateHud());
+        this.rewardNotice = new RewardNotice(this);
+        this.structures = new StructureSystem(this, this.run, this.groundY, (placement, x, y) => {
+            this.xpSystem.dropGem(x, y, STRUCTURES.crate.xp);
+            if (placement.healthDrop) this.healthPickups.drop(`${placement.id}:health`, x, y);
+        }, this.player, reward => this.claimChestReward(reward));
+        this.structures.prepare();
         this.combatSystem = new CombatSystem(this, this.run, this.player, this.enemySystem,
-            (x, y) => this.xpSystem.dropGem(x, y), () => this.endGame(), () => this.updateHud(), () => this.rosie.speak('damage'));
+            (x, y) => this.xpSystem.dropGem(x, y), () => this.endGame(), () => this.updateHud(), () => this.rosie.speak('damage'), this.structures);
 
         this.hud = new Hud(this);
         if (import.meta.env.DEV && WORLD.debugOverlay) {
@@ -90,13 +105,34 @@ export class Game extends Phaser.Scene {
         this.hud.update(this.run, this.xpSystem.xpNeeded());
     }
 
-    private openLevelUp() {
+    private openLevelUp() { this.openUpgradeChoices(); }
+
+    private openUpgradeChoices(chest = false) {
         this.setPhase('choosingUpgrade');
-        const rosieLine = this.rosie.speak('levelUp');
+        const rosieLine = chest ? undefined : this.rosie.speak('levelUp');
         this.playerInput.clearTouch();
         this.offered = selectUpgrades(UPGRADES);
         this.upgradePanel = createUpgradePanel(this, this.run.level, this.offered,
-            (index) => this.chooseUpgrade(index), rosieLine);
+            (index) => this.chooseUpgrade(index), rosieLine, chest ? 'CHEST REWARD' : undefined);
+    }
+
+    private claimChestReward(reward: ChestReward): void {
+        if (this.run.phase !== 'playing') return;
+        if (reward === 'upgrade') {
+            this.rewardNotice.show('CHEST: FREE UPGRADE');
+            this.openUpgradeChoices(true);
+            return;
+        }
+        const healed = reward === 'heal' ? Math.min(STRUCTURES.chest.healing, this.run.maxHealth - this.run.health) : 0;
+        if (healed > 0) {
+            this.run.health += healed;
+            this.rewardNotice.show(`CHEST: +${healed} HEALTH`);
+            this.updateHud();
+        } else {
+            // Full-health healing chests still give a useful reward.
+            this.rewardNotice.show(`CHEST: +${STRUCTURES.chest.xp} XP`);
+            this.xpSystem.award(STRUCTURES.chest.xp);
+        }
     }
 
     private chooseUpgrade(index: number) {
@@ -129,7 +165,7 @@ export class Game extends Phaser.Scene {
         // Keep Phaser's tween clock ticking with zero progression while frozen.
         // Pausing the manager itself can include the pause gap in its next delta.
         this.tweens.timeScale = frozen ? 0 : 1;
-        if (frozen) this.playerInput.clearTouch();
+        if (frozen) { this.playerInput.clearTouch(); this.structures.update(); }
     }
 
     private restartRun(): void {
@@ -203,6 +239,7 @@ export class Game extends Phaser.Scene {
         const steps = Math.max(1, Math.ceil(frameDt / BALANCE.simulation.maxDeltaSeconds));
         const dt = frameDt / steps;
         const actions = this.playerInput.readActions();
+        const interact = this.playerInput.interactPressed();
         let simulatedMs = 0;
         for (let step = 0; step < steps; step++) {
             if (this.run.phase !== 'playing') break;
@@ -214,9 +251,13 @@ export class Game extends Phaser.Scene {
             this.worldCamera.update(this.player.x, dt);
             this.world.update();
             this.enemySystem.prepare();
+            this.structures.prepare();
             if (actions.attack) this.combatSystem.attack();
             this.combatSystem.update(dt);
             this.enemySystem.update(dt, (enemy) => this.combatSystem.checkContact(enemy));
+            if (this.run.phase !== 'playing') break;
+            this.healthPickups.update();
+            this.structures.update(step === 0 && interact);
             if (this.run.phase !== 'playing') break;
             this.xpSystem.update(dt);
         }

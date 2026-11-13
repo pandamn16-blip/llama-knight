@@ -37,6 +37,7 @@ const StartGame = (parent: string) => {
 
     const container = document.getElementById(parent);
     const mobile = isMobileLayout();
+    document.documentElement?.setAttribute('data-game-mobile', String(mobile));
     const width = viewportWidth(container?.clientWidth ?? 1024, container?.clientHeight ?? 768, mobile);
     const game = new Game({ ...config, width, parent });
     // Safe areas/browser chrome resize the usable parent. Height stays 768 in world units.
