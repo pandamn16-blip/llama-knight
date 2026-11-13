@@ -86,6 +86,8 @@ export class Game extends Phaser.Scene {
 
         this.enemySystem = new EnemySystem(this, this.run, this.groundY, this.player);
         this.enemySystem.setTerrain(this.world);
+        this.enemySystem.setWallResolver((from, to, y) =>
+            this.world.resolvePlayerMovement(from, to, y));
         this.enemySystem.prepare(); // Before the first gameplay render, including both approach buffers.
         this.xpSystem = new XpSystem(this, this.run, this.player,
             () => this.openLevelUp(), () => this.updateHud());
