@@ -3,7 +3,11 @@ import type { Scene, GameObjects } from 'phaser';
 import { WORLD } from '../config/world';
 import { BALANCE } from '../config/balance';
 import { ARCHER } from '../config/archers';
-import { hasPyromancerIdle, hasPyromancerRun, PYROMANCER_IDLE, PYROMANCER_RUN } from '../enemies/pyromancer';
+import {
+    hasPyromancerIdle, hasPyromancerRun, hasPyromancerAttack, hasPyromancerBonk,
+    hasPyromancerDeath, hasPyromancerFireball, PYROMANCER_IDLE, PYROMANCER_RUN,
+    PYROMANCER_ATTACK, PYROMANCER_BONK, PYROMANCER_DEATH, PYROMANCER_FIREBALL
+} from '../enemies/pyromancer';
 import type { RunPhase } from '../state/RunState';
 import { generateSection, sectionWindow } from '../world/sections';
 import type { RunState } from '../state/RunState';
@@ -24,10 +28,12 @@ export type Archer = {
     minX: number;
     maxX: number;
     patrolDirection: -1 | 1;
-    animation?: 'idle' | 'run';
+    animation?: 'idle' | 'run' | 'attack' | 'bonk' | 'death';
+    attackKind?: 'attack' | 'bonk';
 };
 type ArcherRecord = { hp: number; dead: boolean; x?: number; patrolDirection?: -1 | 1 };
-type Arrow = { sprite: GameObjects.Container; vx: number; vy: number; distance: number };
+type Arrow = { sprite: GameObjects.Container | GameObjects.Sprite; vx: number; vy: number; distance: number };
+type Dying = { sprite: GameObjects.Container; elapsed: number };
 
 // Pyromancers patrol their own raised ledges without changing Bread's ground AI.
 // Platform bounds and body collision are gameplay geometry, not artwork dimensions.
@@ -35,6 +41,7 @@ export class ArcherSystem {
     private active = new Map<string, Archer>();
     private records = new Map<string, ArcherRecord>();
     private arrows: Arrow[] = [];
+    private dying: Dying[] = [];
 
     constructor(private scene: Scene, private run: RunState,
         private groundY: number, private player: Pick<Player, 'x' | 'y'>,
@@ -73,13 +80,25 @@ export class ArcherSystem {
         return Math.abs(to - clampedTarget) < 0.01;
     }
 
+    private play(archer: Archer, name: 'idle' | 'run' | 'attack' | 'bonk' | 'death'): void {
+        if (!archer.art || archer.animation === name) return;
+        const sheet = name === 'run' ? PYROMANCER_RUN :
+            name === 'attack' ? PYROMANCER_ATTACK : name === 'bonk' ? PYROMANCER_BONK :
+            name === 'death' ? PYROMANCER_DEATH : PYROMANCER_IDLE;
+        const available = name === 'run' ? hasPyromancerRun(this.scene) :
+            name === 'attack' ? hasPyromancerAttack(this.scene) :
+            name === 'bonk' ? hasPyromancerBonk(this.scene) :
+            name === 'death' ? hasPyromancerDeath(this.scene) : hasPyromancerIdle(this.scene);
+        if (!available) return;
+        archer.animation = name;
+        archer.art.play(sheet.animationKey);
+    }
+
     private animate(archer: Archer, moving: boolean): void {
         if (!archer.art) return;
-        const name = moving && hasPyromancerRun(this.scene) ? 'run' : 'idle';
-        if (archer.animation !== name) {
-            archer.animation = name;
-            archer.art.play(name === 'run' ? PYROMANCER_RUN.animationKey : PYROMANCER_IDLE.animationKey);
-        }
+        // Never replace a telegraphed attack with idle before its strike moment.
+        if (archer.state === 'aim') this.play(archer, archer.attackKind ?? 'attack');
+        else this.play(archer, moving ? 'run' : 'idle');
         archer.art.setFlipX(archer.facing === -1);
     }
 
@@ -146,29 +165,55 @@ export class ArcherSystem {
         record.dead = true;
         this.active.delete(archer.id);
         const { x, y } = archer.sprite;
-        archer.sprite.destroy();
+        archer.warning.setVisible(false);
+        if (archer.art && hasPyromancerDeath(this.scene)) {
+            this.play(archer, 'death');
+            this.dying.push({ sprite: archer.sprite, elapsed: 0 });
+        } else archer.sprite.destroy();
         this.onKilled(x, y);
         return true;
     }
 
     private shoot(archer: Archer): void {
-        const dx = this.player.x - archer.sprite.x;
-        const dy = this.player.y - archer.sprite.y;
+        const launchX = archer.sprite.x + archer.facing * ARCHER.fireballSpawnX;
+        const launchY = archer.sprite.y + ARCHER.fireballSpawnY;
+        const dx = this.player.x - launchX;
+        const dy = this.player.y - launchY;
         const length = Math.hypot(dx, dy) || 1;
         const vx = dx / length * ARCHER.projectileSpeed;
         const vy = dy / length * ARCHER.projectileSpeed;
-        const sprite = this.scene.add.container(archer.sprite.x + archer.facing * 25,
-            archer.sprite.y - 8).setDepth(7).setScrollFactor(1);
-        sprite.add([
-            this.scene.add.rectangle(0, 0, 29, 5, 0x715030).setAngle(Math.atan2(vy, vx) * 180 / Math.PI),
-            this.scene.add.rectangle(13, 0, 10, 8, 0xffe0a1).setAngle(Math.atan2(vy, vx) * 180 / Math.PI)
-        ]);
+        let sprite: GameObjects.Sprite | GameObjects.Container;
+        if (hasPyromancerFireball(this.scene)) {
+            const fireball = this.scene.add.sprite(launchX, launchY,
+                PYROMANCER_FIREBALL.key, PYROMANCER_FIREBALL.start)
+                .setOrigin(0.5, 0.5).setScale(ARCHER.fireballScale)
+                .setFlipX(archer.facing === -1).setDepth(7).setScrollFactor(1);
+            // Plays its six frames once, then Phaser keeps the final frame visible
+            // until the actual swept collision or range cleanup. No looping/vanishing.
+            fireball.play(PYROMANCER_FIREBALL.animationKey);
+            sprite = fireball;
+        } else {
+            const placeholder = this.scene.add.container(launchX, launchY).setDepth(7).setScrollFactor(1);
+            placeholder.add([
+                this.scene.add.circle(0, 0, 17, 0xff8c22).setStrokeStyle(3, 0xe04616),
+                this.scene.add.circle(5, 0, 10, 0xffe88d)
+            ]);
+            sprite = placeholder;
+        }
         this.arrows.push({ sprite, vx, vy, distance: 0 });
     }
 
     update(dt: number): void {
         if (this.run.phase !== 'playing') return;
         this.prepare();
+        for (let i = this.dying.length - 1; i >= 0; i--) {
+            const death = this.dying[i];
+            death.elapsed += dt;
+            if (death.elapsed >= ARCHER.deathDuration) {
+                death.sprite.destroy();
+                this.dying.splice(i, 1);
+            }
+        }
         const camera = this.scene.cameras.main;
         for (const archer of this.active.values()) {
             const dx = this.player.x - archer.sprite.x;
@@ -176,7 +221,7 @@ export class ArcherSystem {
                 archer.sprite.x <= camera.scrollX + camera.width + ARCHER.activationMargin;
             archer.sprite.setVisible(visible);
             if (!visible) { archer.art?.anims.pause(); continue; }
-            if (this.run.phase === 'playing') archer.art?.anims.resume();
+            archer.art?.anims.resume();
             const beforeX = archer.sprite.x;
             const onSameLevel = Math.abs(this.player.y - archer.sprite.y) < ARCHER.detectionHeight;
             const inRange = Math.abs(dx) < ARCHER.detectionRange &&
@@ -188,7 +233,10 @@ export class ArcherSystem {
                         ARCHER.chaseSpeed, dt);
                 } else if (inRange) {
                     archer.state = 'aim';
-                    archer.timer = Math.abs(dx) < ARCHER.contactRange ? ARCHER.contactWindup : ARCHER.aimDuration;
+                    archer.attackKind = Math.abs(dx) < ARCHER.contactRange &&
+                        Math.abs(this.player.y - archer.sprite.y) < ARCHER.contactHeight ? 'bonk' : 'attack';
+                    archer.timer = archer.attackKind === 'bonk' ?
+                        ARCHER.contactWindup : ARCHER.aimDuration;
                     archer.facing = dx < 0 ? -1 : 1;
                     archer.warning.setVisible(true);
                 } else {
@@ -202,11 +250,12 @@ export class ArcherSystem {
             } else if (archer.state === 'aim') {
                 if (!inRange) { archer.state = 'watch'; archer.warning.setVisible(false); }
                 else if ((archer.timer -= dt) <= 0) {
-                    // A telegraphed close-range strike shares arrow damage and shield rules.
                     const close = Math.abs(this.player.x - archer.sprite.x) <= ARCHER.contactRange &&
                         Math.abs(this.player.y - archer.sprite.y) <= ARCHER.contactHeight;
-                    if (close) this.onArrowHit(archer.sprite.x >= this.player.x ? 1 : -1);
-                    else this.shoot(archer);
+                    if (archer.attackKind === 'bonk') {
+                        // An escaped bonk misses; never turn a melee animation into a projectile.
+                        if (close) this.onArrowHit(archer.sprite.x >= this.player.x ? 1 : -1);
+                    } else this.shoot(archer);
                     archer.state = 'reload';
                     archer.timer = ARCHER.reloadDuration;
                     archer.warning.setVisible(false);
@@ -218,7 +267,10 @@ export class ArcherSystem {
                         ARCHER.chaseSpeed, dt);
                 }
             }
-            this.animate(archer, Math.abs(archer.sprite.x - beforeX) > 0.01);
+            // Preserve the non-looping attack follow-through until it reaches frame 6.
+            if (archer.state !== 'reload' || !archer.art?.anims.isPlaying)
+                this.animate(archer, Math.abs(archer.sprite.x - beforeX) > 0.01);
+            else archer.art?.setFlipX(archer.facing === -1);
         }
         for (let i = this.arrows.length - 1; i >= 0; i--) {
             const arrow = this.arrows[i], { sprite } = arrow;
@@ -247,12 +299,24 @@ export class ArcherSystem {
             if (phase === 'playing') archer.art?.anims.resume();
             else archer.art?.anims.pause();
         }
+        for (const death of this.dying) {
+            const art = death.sprite.list.find(obj => 'anims' in obj) as GameObjects.Sprite | undefined;
+            if (phase === 'playing') art?.anims.resume();
+            else art?.anims.pause();
+        }
+        for (const arrow of this.arrows) {
+            if ('anims' in arrow.sprite) {
+                if (phase === 'playing') arrow.sprite.anims.resume();
+                else arrow.sprite.anims.pause();
+            }
+        }
     }
 
     destroy(): void {
         this.scene.events.off(Scenes.Events.SHUTDOWN, this.destroy, this);
         for (const archer of this.active.values()) archer.sprite.destroy();
         for (const arrow of this.arrows) arrow.sprite.destroy();
-        this.active.clear(); this.records.clear(); this.arrows = [];
+        for (const death of this.dying) death.sprite.destroy();
+        this.active.clear(); this.records.clear(); this.arrows = []; this.dying = [];
     }
 }
