@@ -2567,7 +2567,10 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     assert.equal(actor.art.played, pyro.PYROMANCER_IDLE.animationKey);
     archers.update(0.02);
     assert.equal(actor.art.played, pyro.PYROMANCER_ATTACK.animationKey, 'Ranged tell plays casting');
-    archers.update(ARCHER.aimDuration + 0.01);
+    // Advance in realistic simulation steps; a 700ms single step could move
+    // the newly spawned projectile through the player in that same update.
+    archers.update(ARCHER.aimDuration - 0.03);
+    archers.update(0.04);
     assert.equal(archers.arrows.length, 1, 'Casting releases exactly one projectile');
     const shot = archers.arrows[0].sprite;
     assert.equal(shot.played, pyro.PYROMANCER_FIREBALL.animationKey);
