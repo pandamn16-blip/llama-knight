@@ -4,5 +4,8 @@ export const ARCHER = {
     detectionRange: 450, detectionHeight: 240,
     aimDuration: 0.7, reloadDuration: 2.5,
     projectileSpeed: 285, projectileRange: 700,
-    arrowHitRadius: 25, activationMargin: 175
+    arrowHitRadius: 25, activationMargin: 175,
+    patrolSpeed: 36, chaseSpeed: 90, preferredRange: 150,
+    ledgeInset: 35, contactRange: 55, contactHeight: 55, contactWindup: 0.55,
+    contactWidth: 42
 } as const;
