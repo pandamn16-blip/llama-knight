@@ -19,6 +19,7 @@ export class CombatSystem {
     private timers = new Set<Phaser.Time.TimerEvent>();
     private tweens = new Set<Phaser.Tweens.Tween>();
     private slashes = new Set<Phaser.GameObjects.Container | Phaser.GameObjects.Sprite>();
+    private fireTicks = new Set<Phaser.GameObjects.Text>();
     private terrain?: Pick<WorldSystem, 'terrainImpact'>;
 
     setTerrain(terrain: Pick<WorldSystem, 'terrainImpact'>): void { this.terrain = terrain; }
@@ -51,9 +52,25 @@ export class CombatSystem {
 
     resolvePyromancerFireContact(): void {
         if (this.run.phase !== 'playing' || !this.archers?.playerStandingOnPyromancer()) return;
-        // Standing on a flame is hazardous even without a bonk animation.
-        // takeDamage enforces the existing 950ms invulnerability window.
-        this.takeDamage(1);
+        // Standing inside the flame hurts, respecting the standard invulnerability
+        // window. Only a successful damage tick produces a red number.
+        const damage = 1;
+        if (this.takeDamage(damage)) {
+            const tick = this.scene.add.text(this.player.x, this.player.y - 52,
+                `-${damage}`, { fontSize: '25px', color: '#ff3030',
+                    fontStyle: 'bold', stroke: '#530808', strokeThickness: 4 })
+                .setOrigin(0.5).setDepth(12).setScrollFactor(1);
+            this.fireTicks.add(tick);
+            const tween = this.scene.tweens.add({
+                targets: tick, y: tick.y - 30, alpha: 0, duration: 650,
+                onComplete: () => {
+                    tick.destroy();
+                    this.fireTicks.delete(tick);
+                    this.tweens.delete(tween);
+                }
+            });
+            this.tweens.add(tween);
+        }
     }
 
     resolveArcherArrow(sourceDirection: -1 | 1): void {
@@ -219,9 +236,9 @@ export class CombatSystem {
         this.tweens.add(tween);
     }
 
-    private takeDamage(amount = 1) {
-        if (this.run.phase !== 'playing') return;
-        if ((this.run.runTime * 1000) - this.run.lastDamage < BALANCE.player.damageCooldown) return;
+    private takeDamage(amount = 1): boolean {
+        if (this.run.phase !== 'playing') return false;
+        if ((this.run.runTime * 1000) - this.run.lastDamage < BALANCE.player.damageCooldown) return false;
         this.run.lastDamage = (this.run.runTime * 1000);
         this.run.health -= amount;
         this.player.showHurt();
@@ -232,6 +249,7 @@ export class CombatSystem {
         this.tweens.add(tween);
         if (this.run.health <= 0) this.onDeath();
         this.onChanged();
+        return true;
     }
 
     destroy(): void {
@@ -239,6 +257,8 @@ export class CombatSystem {
         for (const timer of this.timers) timer.remove(false);
         for (const tween of this.tweens) tween.remove();
         for (const slash of this.slashes) if (slash.active) slash.destroy();
+        for (const tick of this.fireTicks) if (tick.active) tick.destroy();
+        this.fireTicks.clear();
         for (const shot of this.projectiles) if (shot.sprite.active) shot.sprite.destroy();
         this.projectiles = [];
         this.timers.clear();
