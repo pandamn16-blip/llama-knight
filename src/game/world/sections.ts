@@ -1,6 +1,8 @@
 import { WORLD } from '../config/world';
 import { BALANCE } from '../config/balance';
 import { STRUCTURES } from '../config/structures';
+import { generatePlatforms } from './terrain';
+import type { TerrainPlatform } from './terrain';
 
 // Plain section data: generating the same index/seed never depends on travel order.
 export interface WorldSection {
@@ -12,6 +14,7 @@ export interface WorldSection {
     sceneryXs: number[];
     enemies: BreadPlacement[];
     structures: StructurePlacement[];
+    platforms: TerrainPlatform[];
 }
 
 // Content identity is separate from position, so later layouts may place different
@@ -62,7 +65,8 @@ export function generateSection(index: number, runSeed: number): WorldSection {
         });
     }
     return { id: `${runSeed >>> 0}:${index}`, index, startX, endX,
-        seed: sectionSeed(runSeed, index), sceneryXs, enemies, structures };
+        seed: sectionSeed(runSeed, index), sceneryXs, enemies, structures,
+        platforms: generatePlatforms(index, runSeed) };
 }
 
 export function sectionWindow(scrollX: number, width: number, viewports: number): { first: number; last: number } {
