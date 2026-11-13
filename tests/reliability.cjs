@@ -2574,7 +2574,8 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     assert.equal(archers.arrows.length, 1, 'Casting releases exactly one projectile');
     const shot = archers.arrows[0].sprite;
     assert.equal(shot.played, pyro.PYROMANCER_FIREBALL.animationKey);
-    shot.anims.isPlaying = false; // Animation finished; last frame remains until impact.
+    shot.anims.isPlaying = false; // Projectile animation finished; final frame stays.
+    actor.art.anims.isPlaying = false; // Simulate non-looping cast completing in Phaser.
     archers.update(0.01);
     assert.equal(shot.active, true, 'Fireball persists after its last animation frame');
     assert.equal(archers.arrows[0].sprite, shot);
