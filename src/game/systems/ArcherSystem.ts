@@ -231,11 +231,10 @@ export class ArcherSystem {
             const inRange = Math.abs(dx) < ARCHER.detectionRange &&
                 onSameLevel;
             if (archer.state === 'watch') {
-                if (inRange && Math.abs(dx) > ARCHER.preferredRange + ARCHER.contactWidth) {
-                    // Close the distance, but never leave this platform or walk through the player.
-                    this.walk(archer, this.player.x - Math.sign(dx) * ARCHER.preferredRange,
-                        ARCHER.chaseSpeed, dt);
-                } else if (inRange) {
+                if (inRange) {
+                    // Fire from anywhere within detection range. Otherwise a
+                    // platform-bound Pyromancer can get stuck chasing its
+                    // preferred distance at the ledge edge and never shoot.
                     archer.state = 'aim';
                     archer.attackKind = Math.abs(dx) < ARCHER.contactRange &&
                         Math.abs(this.player.y - archer.sprite.y) < ARCHER.contactHeight ? 'bonk' : 'attack';
