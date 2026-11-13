@@ -2500,8 +2500,8 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
 
 // Pyromancer animation source contracts: six original RGBA strips,
 // two non-looping attacks, a non-looping death and one-shot projectile.
-// The projectile's final frame remains displayed after its animation ends;
-// the gameplay system, not the animation, destroys it on collision.
+// The projectile animates frames 0-4, holds frame 4 while flying,
+// and shows frame 5 only after a confirmed collision.
 {
     const pyro = load('enemies/pyromancer');
     const states = ['ATTACK', 'BONK', 'DEATH', 'FIREBALL'];
@@ -2514,11 +2514,13 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
         assert.equal(bytes.readUInt32BE(20), 256, state + ' frame height');
         assert.equal(bytes[25], 6, state + ' supports transparency');
         assert.equal(spec.start, 0);
-        assert.equal(spec.end, 5);
+        assert.equal(spec.end, state === 'FIREBALL' ? 4 : 5);
         assert.equal(spec.repeat, 0, state + ' plays once, never loops');
         assert.equal(spec.originY, 224 / 256);
     }
-    assert.equal(pyro.PYROMANCER_ATTACK.scale, pyro.PYROMANCER_IDLE.scale);
+    assert.ok(pyro.PYROMANCER_ATTACK.scale > pyro.PYROMANCER_IDLE.scale,
+        'Attack art compensates for smaller figure drawn inside the frame');
+    assert.equal(pyro.PYROMANCER_FIREBALL.impactFrame, 5, 'Final frame is impact-only');
     assert.equal(pyro.PYROMANCER_BONK.scale, pyro.PYROMANCER_IDLE.scale);
     assert.equal(pyro.PYROMANCER_DEATH.scale, pyro.PYROMANCER_IDLE.scale);
     console.log('PASS Pyromancer combat: original attack/bonk/death/fireball sheets and animation contracts.');
@@ -2551,7 +2553,8 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
         const spr = g.add.container(x, y);
         spr.textureKey = key;
         spr.anims = { isPlaying: false, pause() { this.paused = true; },
-            resume() { this.paused = false; } };
+            resume() { this.paused = false; }, stop() { this.isPlaying = false; } };
+        spr.setFrame = function(frame) { this.frameIndex = frame; return this; };
         spr.play = function(key) { this.played = key; this.anims.isPlaying = true; return this; };
         spr.setFlipX = function(value) { this.flipX = value; return this; };
         return spr;
@@ -2567,6 +2570,7 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     assert.equal(actor.art.played, pyro.PYROMANCER_IDLE.animationKey);
     archers.update(0.02);
     assert.equal(actor.art.played, pyro.PYROMANCER_ATTACK.animationKey, 'Ranged tell plays casting');
+    assert.equal(actor.art.scaleX, pyro.PYROMANCER_ATTACK.scale, 'Cast pose does not shrink');
     // Advance in realistic simulation steps; a 700ms single step could move
     // the newly spawned projectile through the player in that same update.
     archers.update(ARCHER.aimDuration - 0.03);
@@ -2580,6 +2584,20 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     assert.equal(shot.active, true, 'Fireball persists after its last animation frame');
     assert.equal(archers.arrows[0].sprite, shot);
     assert.equal(actor.art.played, pyro.PYROMANCER_IDLE.animationKey, 'Returns to idle');
+    assert.equal(actor.art.scaleX, pyro.PYROMANCER_IDLE.scale, 'Idle restores original scale');
+    // Flight animation has finished and is holding frame 4, not the impact frame.
+    shot.setFrame(pyro.PYROMANCER_FIREBALL.end);
+    assert.notEqual(shot.frameIndex, pyro.PYROMANCER_FIREBALL.impactFrame);
+    g.player.x = shot.x; g.player.y = shot.y;
+    const previousHits = hits.length;
+    archers.update(0.01);
+    assert.equal(hits.length, previousHits + 1, 'Collision damages exactly once');
+    assert.equal(shot.frameIndex, pyro.PYROMANCER_FIREBALL.impactFrame,
+        'Final fireball frame appears only at impact');
+    assert.equal(shot.active, true, 'Impact frame lingers briefly');
+    archers.update(0.14);
+    assert.equal(shot.active, false, 'Impact sprite is cleaned up');
+    assert.equal(hits.length, previousHits + 1, 'Impact does not damage twice');
 
     // A separate Pyromancer starts a melee animation but does not cast a fireball.
     g.cameras.main.setScroll(14000, 0); archers.prepare();
