@@ -32,7 +32,9 @@ export const PYROMANCER_ATTACK = {
 } as const;
 export const PYROMANCER_BONK = {
     ...character, key: 'pyromancer:bonk', animationKey: 'pyromancer:bonk',
-    path: 'enemies/pyromancer-pancake/bonk.png', fps: 11, repeat: 0
+    path: 'enemies/pyromancer-pancake/bonk.png', fps: 11, repeat: 0,
+    // Bonk poses were authored with a smaller character footprint than idle.
+    scale: 0.74
 } as const;
 export const PYROMANCER_DEATH = {
     ...character, key: 'pyromancer:death', animationKey: 'pyromancer:death',
@@ -41,8 +43,8 @@ export const PYROMANCER_DEATH = {
 export const PYROMANCER_FIREBALL = {
     ...character, key: 'pyromancer:fireball', animationKey: 'pyromancer:fireball',
     path: 'enemies/pyromancer-pancake/fireball.png', fps: 12, repeat: 0,
-    end: 4, impactFrame: 5,
-    // Frames 0–4 animate while airborne, then frame 4 holds; frame 5 is impact-only.
+    end: 3, impactFrame: 5,
+    // Frames 0–3 animate while airborne, then frame 3 holds; frame 5 is impact-only.
     scale: 0.27
 } as const;
 

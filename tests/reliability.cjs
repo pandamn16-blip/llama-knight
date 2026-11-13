@@ -2456,6 +2456,20 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     assert.equal(blocked, body.sprite.x - ARCHER.contactWidth);
     assert.equal(second.resolvePlayerMovement(body.sprite.x - 120, body.sprite.x + 30,
         body.sprite.y + 160), body.sprite.x + 30, 'No body blocking across different heights');
+    // The 68px separation should prevent the rendered Pyromancer and
+    // character from visibly overlapping, even if a frame starts inside it.
+    assert.equal(ARCHER.contactWidth, 68);
+    assert.equal(ARCHER.contactRange, 85, 'Bonk can reach beyond the solid collision boundary');
+    assert.equal(second.resolvePlayerMovement(body.sprite.x - 60, body.sprite.x - 45,
+        body.sprite.y), body.sprite.x - 60,
+        'Player already inside left contact radius cannot walk further in');
+    assert.equal(second.resolvePlayerMovement(body.sprite.x + 60, body.sprite.x + 45,
+        body.sprite.y), body.sprite.x + 60,
+        'Player already inside right contact radius cannot walk further in');
+    assert.equal(second.resolvePlayerMovement(body.sprite.x - 60, body.sprite.x - 90,
+        body.sprite.y), body.sprite.x - 90, 'Retreat left remains possible');
+    assert.equal(second.resolvePlayerMovement(body.sprite.x + 60, body.sprite.x + 90,
+        body.sprite.y), body.sprite.x + 90, 'Retreat right remains possible');
     g.player.x = body.sprite.x - 38; g.player.y = body.sprite.y;
     body.state = 'watch';
     second.update(0.02);
@@ -2502,7 +2516,7 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
 
 // Pyromancer animation source contracts: six original RGBA strips,
 // two non-looping attacks, a non-looping death and one-shot projectile.
-// The projectile animates frames 0-4, holds frame 4 while flying,
+// The projectile animates frames 0-3, holds frame 3 while flying,
 // and shows frame 5 only after a confirmed collision.
 {
     const pyro = load('enemies/pyromancer');
@@ -2516,14 +2530,15 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
         assert.equal(bytes.readUInt32BE(20), 256, state + ' frame height');
         assert.equal(bytes[25], 6, state + ' supports transparency');
         assert.equal(spec.start, 0);
-        assert.equal(spec.end, state === 'FIREBALL' ? 4 : 5);
+        assert.equal(spec.end, state === 'FIREBALL' ? 3 : 5);
         assert.equal(spec.repeat, 0, state + ' plays once, never loops');
         assert.equal(spec.originY, 224 / 256);
     }
     assert.ok(pyro.PYROMANCER_ATTACK.scale > pyro.PYROMANCER_IDLE.scale,
         'Attack art compensates for smaller figure drawn inside the frame');
     assert.equal(pyro.PYROMANCER_FIREBALL.impactFrame, 5, 'Final frame is impact-only');
-    assert.equal(pyro.PYROMANCER_BONK.scale, pyro.PYROMANCER_IDLE.scale);
+    assert.ok(pyro.PYROMANCER_BONK.scale > pyro.PYROMANCER_IDLE.scale,
+        'Bonk animation compensates for smaller illustrated pancake');
     assert.equal(pyro.PYROMANCER_DEATH.scale, pyro.PYROMANCER_IDLE.scale);
     console.log('PASS Pyromancer combat: original attack/bonk/death/fireball sheets and animation contracts.');
 }
@@ -2587,7 +2602,7 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     assert.equal(archers.arrows[0].sprite, shot);
     assert.equal(actor.art.played, pyro.PYROMANCER_IDLE.animationKey, 'Returns to idle');
     assert.equal(actor.art.scaleX, pyro.PYROMANCER_IDLE.scale, 'Idle restores original scale');
-    // Flight animation has finished and is holding frame 4, not the impact frame.
+    // Flight animation has finished and is holding frame 3, not the impact frame.
     shot.setFrame(pyro.PYROMANCER_FIREBALL.end);
     assert.notEqual(shot.frameIndex, pyro.PYROMANCER_FIREBALL.impactFrame);
     g.player.x = shot.x; g.player.y = shot.y;
@@ -2605,10 +2620,12 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     g.cameras.main.setScroll(14000, 0); archers.prepare();
     g.cameras.main.setScroll(perch.x - 700, 0); archers.prepare();
     const bonker = archers.archers[0];
-    g.player.x = bonker.sprite.x - 38; g.player.y = bonker.sprite.y;
+    g.player.x = bonker.sprite.x - 78; g.player.y = bonker.sprite.y;
     bonker.state = 'watch';
     archers.update(0.01);
     assert.equal(bonker.art.played, pyro.PYROMANCER_BONK.animationKey, 'Close attack plays bonk');
+    assert.equal(bonker.art.scaleX, pyro.PYROMANCER_BONK.scale,
+        'Bonk pose matches the corrected character size');
     const shotsBefore = archers.arrows.length;
     archers.update(ARCHER.contactWindup + 0.01);
     assert.equal(archers.arrows.length, shotsBefore, 'Bonk never launches a projectile');
