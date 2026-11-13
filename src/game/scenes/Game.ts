@@ -261,9 +261,24 @@ export class Game extends Phaser.Scene {
             if (this.run.phase !== 'playing') break;
             this.run.runTime += dt;
             simulatedMs += dt * 1000;
+            // One-way standing surfaces from terrain and living enemy heads.
+            // Choose the highest surface crossed while falling, and retain
+            // whichever surface already supports the player's feet.
+            this.enemySystem.prepare();
+            this.archerSystem?.prepare();
+            const surfaces = [this.world, this.enemySystem, this.archerSystem];
             this.player.update(actions, dt,
                 (from, to, y) => this.archerSystem.resolvePlayerMovement(from,
-                    this.enemySystem.resolvePlayerMovement(from, to, y), y), this.world);
+                    this.enemySystem.resolvePlayerMovement(from, to, y), y),
+                {
+                    landingY: (x, prev, next) => {
+                        const hits = surfaces.map(surface => surface.landingY(x, prev, next))
+                            .filter((value): value is number => value !== undefined);
+                        return hits.length ? Math.min(...hits) : undefined;
+                    },
+                    standingY: (x, foot) => surfaces.map(surface => surface.standingY(x, foot))
+                        .find(value => value !== undefined)
+                });
             this.run.furthestX = Math.max(this.run.furthestX, this.player.x);
             this.run.distance = Math.max(0, this.run.furthestX - this.run.startX) / WORLD.pixelsPerMetre;
             this.worldCamera.update(this.player.x, dt);
@@ -275,6 +290,9 @@ export class Game extends Phaser.Scene {
             this.combatSystem.update(dt);
             this.enemySystem.update(dt, (enemy) => this.combatSystem.resolveEnemyAttack(enemy));
             this.archerSystem?.update(dt);
+            // Fire contact on the Pyromancer's head; Bread heads are harmless
+            // except for their existing telegraphed melee attacks.
+            this.combatSystem.resolvePyromancerFireContact();
             if (this.run.phase !== 'playing') break;
             this.healthPickups.update();
             this.structures.update(step === 0 && interact);
