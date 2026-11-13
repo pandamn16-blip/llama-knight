@@ -21,7 +21,7 @@ export interface WorldSection {
 // occupants at the same X without sharing their saved state.
 export interface CratePlacement { id: string; kind: 'crate'; x: number; healthDrop: boolean }
 export type ChestReward = 'xp' | 'heal' | 'upgrade';
-export interface ChestPlacement { id: string; kind: 'chest'; x: number; reward: ChestReward }
+export interface ChestPlacement { id: string; kind: 'chest'; x: number; reward: ChestReward; elevation?: number }
 export type StructurePlacement = CratePlacement | ChestPlacement;
 
 export interface BreadPlacement { id: string; kind: 'bread'; x: number }
@@ -64,9 +64,15 @@ export function generateSection(index: number, runSeed: number): WorldSection {
             reward: index === 0 ? 'upgrade' : rewards[sectionSeed(runSeed ^ 0x52455744, index) % rewards.length]
         });
     }
+    const platforms = generatePlatforms(index, runSeed, sectionSeed(runSeed ^ 0x54455252, index));
+    if (index > 0 && index % 2 === 1) {
+        const perch = platforms[1];
+        structures.push({ id: `${runSeed >>> 0}:${index}:chest:high`, kind: 'chest',
+            x: perch.x, elevation: perch.height, reward: index % 4 === 1 ? 'xp' : 'upgrade' });
+    }
     return { id: `${runSeed >>> 0}:${index}`, index, startX, endX,
         seed: sectionSeed(runSeed, index), sceneryXs, enemies, structures,
-        platforms: generatePlatforms(index, runSeed, sectionSeed(runSeed ^ 0x54455252, index)) };
+        platforms };
 }
 
 export function sectionWindow(scrollX: number, width: number, viewports: number): { first: number; last: number } {
