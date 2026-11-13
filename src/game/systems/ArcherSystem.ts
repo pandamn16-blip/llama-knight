@@ -46,6 +46,9 @@ export class ArcherSystem {
     private dying: Dying[] = [];
     private hitFlashTimers = new Map<string, Time.TimerEvent>();
     private terrain?: Pick<WorldSystem, 'terrainImpact' | 'enemyHeadExposed'>;
+    private immobilized: (id: string) => boolean = () => false;
+    setImmobilized(check: (id: string) => boolean): void { this.immobilized = check; }
+
 
     setTerrain(terrain: Pick<WorldSystem, 'terrainImpact' | 'enemyHeadExposed'>): void {
         this.terrain = terrain;
@@ -296,6 +299,12 @@ export class ArcherSystem {
             archer.sprite.setVisible(visible);
             if (!visible) { archer.art?.anims.pause(); continue; }
             archer.art?.anims.resume();
+            if (this.immobilized(archer.id)) {
+                archer.warning.setVisible(false);
+                archer.state = 'watch';
+                this.play(archer, 'idle');
+                continue;
+            }
             const beforeX = archer.sprite.x;
             const onSameLevel = Math.abs(this.player.y - archer.sprite.y) < ARCHER.detectionHeight;
             const inRange = Math.abs(dx) < ARCHER.detectionRange &&

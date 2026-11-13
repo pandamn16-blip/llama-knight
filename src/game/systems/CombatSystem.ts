@@ -58,6 +58,10 @@ export class CombatSystem {
         this.takeDamage(1, true);
     }
 
+    applyEnvironmentalDamage(amount = 1): boolean {
+        return this.takeDamage(amount);
+    }
+
     resolveArcherArrow(sourceDirection: -1 | 1): void {
         if (this.run.phase !== 'playing') return;
         if (this.player.isShielding && this.player.facing === sourceDirection) this.blockImpact();

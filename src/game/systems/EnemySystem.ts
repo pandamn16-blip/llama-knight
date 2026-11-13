@@ -23,6 +23,9 @@ export class EnemySystem {
     private dying = new Set<Enemy>();
     private records = new Map<string, EnemyRecord>();
     private terrain?: Pick<WorldSystem, 'enemyHeadExposed'>;
+    private immobilized: (id: string) => boolean = () => false;
+    setImmobilized(check: (id: string) => boolean): void { this.immobilized = check; }
+
 
     setTerrain(terrain: Pick<WorldSystem, 'enemyHeadExposed'>): void { this.terrain = terrain; }
 
@@ -142,7 +145,7 @@ export class EnemySystem {
             enemy.sprite.setVisible(enemy.sprite.x >= camera.scrollX - 80 && enemy.sprite.x <= camera.scrollX + camera.width + 80);
             if (!near) { enemy.art?.anims.pause(); continue; }
             enemy.art?.anims.resume();
-            if (this.player) this.advance(enemy, dt, onAttack);
+            if (this.player && !this.immobilized(enemy.placementId)) this.advance(enemy, dt, onAttack);
             this.syncVisual(enemy);
             if (this.run.phase !== 'playing') return;
         }

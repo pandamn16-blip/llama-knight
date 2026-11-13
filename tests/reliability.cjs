@@ -2853,3 +2853,63 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     assert.equal(combat.damageTicks.size, 0, 'Damage number effects cleaned up');
     console.log('PASS universal floating damage numbers: incoming, cooldown, enemy and lethal hits.');
 }
+
+
+// Phase 1 environmental hazards: snap traps require three new attack presses,
+// while spikes reuse the shared damage cooldown and also affect Bread enemies.
+{
+    const { game: g } = fixture('candy');
+    const { HazardSystem } = load('systems/HazardSystem');
+    const { BALANCE } = load('config/balance');
+    const fakeArchers = { archers: [], damage() {} };
+    const hazards = new HazardSystem(g, g.run, g.groundY, g.player,
+        g.enemySystem, fakeArchers, damage => g.combatSystem.applyEnvironmentalDamage(damage));
+    const trap = hazards.make({ id: 'test:trap', x: g.player.x, kind: 'snap-trap' });
+    hazards.active.set(trap.placement.id, trap);
+    g.run.runTime = 1;
+    g.run.lastDamage = -1000;
+    const before = g.run.health;
+    hazards.update();
+    assert.equal(g.run.health, before - 1, 'Snap trap deals one initial damage');
+    assert.equal(hazards.isPlayerTrapped, true);
+    assert.equal(hazards.handlePlayerAttack(true), true);
+    assert.equal(trap.trapHits, 1);
+    assert.equal(hazards.handlePlayerAttack(true), true);
+    assert.equal(trap.trapHits, 1, 'Holding attack does not count as repeated strikes');
+    hazards.handlePlayerAttack(false); hazards.handlePlayerAttack(true);
+    assert.equal(trap.trapHits, 2);
+    assert.equal(hazards.isPlayerTrapped, true, 'Two hits are insufficient');
+    hazards.handlePlayerAttack(false); hazards.handlePlayerAttack(true);
+    assert.equal(hazards.isPlayerTrapped, false, 'Third discrete strike frees Candy');
+    assert.equal(hazards.broken.has('test:trap'), true);
+    assert.equal(trap.pieces.every(piece => !piece.active), true, 'Broken trap visuals removed');
+
+    g.run.runTime = 3;
+    const spikes = hazards.make({ id: 'test:spikes', x: g.player.x, kind: 'fixed-spikes' });
+    hazards.active.set(spikes.placement.id, spikes);
+    const remaining = g.run.health;
+    hazards.update();
+    assert.equal(g.run.health, remaining - 1, 'Spikes hurt the player');
+    assert.equal(g.combatSystem.damageTicks.size >= 2, true, 'Hazard damage shows red ticks');
+    hazards.update();
+    assert.equal(g.run.health, remaining - 1, 'Invulnerability prevents per-frame damage');
+    g.run.runTime = 4;
+    hazards.update();
+    assert.equal(g.run.health, remaining - 2, 'Damage resumes after cooldown');
+    const bread = g.enemySystem.spawnBread(g.player.x);
+    assert.ok(bread);
+    const breadHp = bread.hp;
+    hazards.update();
+    assert.equal(bread.hp, breadHp - 1, 'Spikes affect Bread enemies');
+    hazards.update();
+    assert.equal(bread.hp, breadHp - 1, 'Enemy hazard damage has its own cooldown');
+
+    g.run.phase = 'paused';
+    const pauseHp = g.run.health;
+    g.run.runTime = 10;
+    hazards.update();
+    assert.equal(g.run.health, pauseHp, 'Paused hazards do not deal damage');
+    g.events.emit('shutdown');
+    assert.equal(hazards.active.size, 0, 'Hazards clean up at scene shutdown');
+    console.log('PASS Phase 1 hazards: three presses, trapped movement state, player/enemy spikes, cooldowns and pause.');
+}
