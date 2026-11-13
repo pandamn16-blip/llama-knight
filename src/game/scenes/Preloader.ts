@@ -1,4 +1,5 @@
 import { loadBreadAnimations, registerBreadAnimations } from '../enemies/bread';
+import { loadPyromancerIdle, registerPyromancerIdle } from '../enemies/pyromancer';
 import { loadShieldSheets, registerShieldAnimations } from '../characters/shield';
 import { Scene } from 'phaser';
 import { loadEnvironmentArt } from '../world/environmentAssets';
@@ -41,6 +42,7 @@ export class Preloader extends Scene
         loadCharacterSheets(this);
         loadWeaponEffects(this);
         loadBreadAnimations(this);
+        loadPyromancerIdle(this);
         loadShieldSheets(this);
         loadEnvironmentArt(this);
     }
@@ -54,6 +56,7 @@ export class Preloader extends Scene
         registerCharacterAnimations(this);
         registerWeaponEffects(this);
         registerBreadAnimations(this);
+        registerPyromancerIdle(this);
         registerShieldAnimations(this);
         this.scene.start('MainMenu');
     }
