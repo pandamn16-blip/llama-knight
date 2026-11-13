@@ -1,7 +1,7 @@
 import type { Scene } from 'phaser';
 import type { CharacterVisual } from './definitions';
 
-export const SHIELD = { movementMultiplier: 0.45, impactMs: 140 } as const;
+export const SHIELD = { movementMultiplier: 0, impactMs: 140 } as const;
 // Native source cells verified from the supplied file. Uniform visual scaling only.
 export const CHARACTER_SHIELDS: Partial<Record<CharacterVisual, {
     key: string; path: string; width: number; height: number; frameSize: number; frames: number;

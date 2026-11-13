@@ -1580,6 +1580,8 @@ for (const fps of [60, 20, 15, 8]) {
 // Unsmoothed 30 FPS time yields identical early/late speed for either character.
 for (const [characterId, speed] of [['llamaCrunch', 280], ['candy', 350]]) {
     const { game: g } = explorationFixture(characterId);
+    // Measure unobstructed speed independently of living enemy blockers.
+    g.enemySystem.resolvePlayerMovement = (_from, to) => to;
     g.playerInput.keys.D.isDown = true;
     for (let second = 0; second < 8; second++) {
         const startX = g.player.x;
@@ -1744,6 +1746,8 @@ console.log('PASS startup fixes: unsmoothed engine time, raw-time speed diagnost
 // The real scene walks beyond the previous endpoint with continuous speed/framing/progress.
 for (const characterId of ['llamaCrunch', 'candy']) {
     const { game: g } = explorationFixture(characterId);
+    // Isolate world extension/camera from combat obstacles.
+    g.enemySystem.resolvePlayerMovement = (_from, to) => to;
     g.player.sprite.x = 15500;
     for (let i = 0; i < 180; i++) g.worldCamera.update(g.player.x, 1 / 60);
     g.playerInput.keys.D.isDown = true;
@@ -2213,7 +2217,8 @@ for (const character of ['llamaCrunch', 'candy']) {
     g.player.update({ left: false, right: true, jump: true }, 0.1);
     const multiplier = character === 'llamaCrunch' ? load('characters/shield').SHIELD.movementMultiplier : 1;
     assert.ok(Math.abs(g.player.x - start - g.run.moveSpeed * multiplier * 0.1) < 1e-8);
-    assert.equal(g.run.onGround, false); assert.equal(g.run.velocityY, -490);
+    assert.equal(g.run.onGround, character === 'llamaCrunch');
+    assert.equal(g.run.velocityY, character === 'llamaCrunch' ? 0 : -490);
     const last = g.run.weapon.lastAttack; g.combatSystem.attack();
     assert.equal(g.run.weapon.lastAttack === last, character === 'llamaCrunch');
     g.player.setShielding(false); const x = g.player.x;
@@ -2309,3 +2314,55 @@ console.log('PASS shielding: front/back/left blocks at impact, late raise/releas
     g.events.emit('shutdown');
 }
 console.log('PASS balance polish: fixed regional stats/persistence, capped health growth, three starting sword hits, and non-looping shield frame-1 hold/release/facing.');
+
+// Living bodies stop horizontal passage without contact damage or sprite-dependent bounds.
+for (const character of ['llamaCrunch', 'candy']) {
+    const { game: g } = fixture(character);
+    g.player = new Player(g, g.run, g.groundY);
+    const width = load('config/balance').BALANCE.player.contactWidth;
+    const enemy = g.enemySystem.spawnBread(400);
+    const resolve = (from, to, y) => g.enemySystem.resolvePlayerMovement(from, to, y);
+    const right = { left: false, right: true, jump: false };
+    const left = { left: true, right: false, jump: false };
+    g.player.sprite.x = 300;
+    g.player.update(right, 1, resolve); assert.equal(g.player.x, 400 - width);
+    const health = g.run.health;
+    g.player.update(right, 0.05, resolve); assert.equal(g.player.x, 400 - width);
+    g.player.update(left, 0.05, resolve); assert.ok(g.player.x < 400 - width);
+    g.player.sprite.x = 500;
+    g.player.update(left, 1, resolve); assert.equal(g.player.x, 400 + width);
+    assert.equal(g.run.health, health, 'Body contact does not add damage ticks');
+    // Elevated movement can cross; an overlap can always be escaped.
+    assert.equal(resolve(300, 500, enemy.sprite.y - 100), 500);
+    assert.equal(resolve(390, 300, enemy.sprite.y), 300);
+    assert.equal(resolve(410, 500, enemy.sprite.y), 500);
+    g.enemySystem.player = g.player;
+    g.player.sprite.x = 400 + width;
+    g.enemySystem.move(enemy, 600, 125, 1); assert.equal(enemy.sprite.x, 400);
+    g.enemySystem.damage(enemy, enemy.hp);
+    assert.equal(resolve(300, 500, enemy.sprite.y), 500, 'Death removes the blocker immediately');
+    g.events.emit('shutdown');
+}
+console.log('PASS Bread body collision: both characters, both directions, swept steps, retreat/overlap escape, jumping clearance, enemy movement and death removal without contact damage.');
+
+// Shield immobilizes Crunch immediately, while airborne gravity and release remain natural.
+{
+    const { game: g } = fixture(); g.player = new Player(g, g.run, g.groundY);
+    g.player.setShielding(true);
+    const x = g.player.x, y = g.player.y;
+    for (const left of [true, false]) {
+        g.player.update({ left, right: !left, jump: true }, 0.1);
+        assert.equal(g.player.x, x); assert.equal(g.player.y, y);
+        assert.equal(g.run.onGround, true); assert.equal(g.run.velocityY, 0);
+    }
+    g.player.setShielding(false);
+    g.player.update({ left: false, right: true, jump: true }, 0.1);
+    assert.equal(g.player.x, x + g.run.moveSpeed * 0.1); assert.equal(g.run.onGround, false);
+    g.player.setShielding(true);
+    const airborneX = g.player.x, airborneY = g.player.y, velocity = g.run.velocityY;
+    g.player.update({ left: false, right: true, jump: true }, 0.1);
+    assert.equal(g.player.x, airborneX); assert.notEqual(g.player.y, airborneY);
+    assert.equal(g.run.velocityY, velocity + load('config/balance').BALANCE.player.gravity * 0.1);
+    g.events.emit('shutdown');
+}
+console.log('PASS stationary shield: no horizontal movement or jumping, immediate release, airborne gravity and unchanged Candy controls.');

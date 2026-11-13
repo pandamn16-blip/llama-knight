@@ -28,6 +28,19 @@ export class EnemySystem {
 
     get enemies(): readonly Enemy[] { return this.items; }
 
+    // Sweep the requested movement so fast steps cannot pass through a living body.
+    // Contact dimensions are gameplay values, independent of sprite scale/animation.
+    resolvePlayerMovement(from: number, to: number, y: number): number {
+        for (const enemy of this.items) {
+            if (enemy.hp <= 0 || !enemy.sprite.active ||
+                Math.abs(y - enemy.sprite.y) >= BALANCE.player.contactHeight) continue;
+            const x = enemy.sprite.x;
+            if (to > from && from <= x) to = Math.min(to, Math.max(from, x - BALANCE.player.contactWidth));
+            else if (to < from && from >= x) to = Math.max(to, Math.min(from, x + BALANCE.player.contactWidth));
+        }
+        return to;
+    }
+
     damage(enemy: Enemy, amount: number): boolean {
         const record = this.records.get(enemy.placementId)!;
         if (record.defeated || !this.items.includes(enemy)) return false;
@@ -159,7 +172,15 @@ export class EnemySystem {
     private move(enemy: Enemy, target: number, speed: number, dt: number): boolean {
         const dx = target - enemy.sprite.x;
         if (dx !== 0) enemy.brain.facing = dx < 0 ? -1 : 1;
-        enemy.sprite.x += Math.sign(dx) * Math.min(Math.abs(dx), speed * dt);
+        const from = enemy.sprite.x;
+        let to = from + Math.sign(dx) * Math.min(Math.abs(dx), speed * dt);
+        if (this.player && Math.abs(this.player.y - enemy.sprite.y) < BALANCE.player.contactHeight) {
+            if (to > from && from <= this.player.x)
+                to = Math.min(to, Math.max(from, this.player.x - BALANCE.player.contactWidth));
+            else if (to < from && from >= this.player.x)
+                to = Math.max(to, Math.min(from, this.player.x + BALANCE.player.contactWidth));
+        }
+        enemy.sprite.x = to;
         return Math.abs(target - enemy.sprite.x) < 0.01;
     }
 
