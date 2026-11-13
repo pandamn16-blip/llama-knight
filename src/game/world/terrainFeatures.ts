@@ -8,6 +8,9 @@ export type BreakableWall = { id: string; x: number; width: number; height: numb
 // between adjacent boards avoids invisible seams in one-way standing checks.
 export function terrainPieces(platforms: readonly TerrainPlatform[], section: number): TerrainPiece[] {
     const pieces: TerrainPiece[] = [];
+    const crumbleCandidates = platforms.flatMap((p, i) =>
+        i > 1 && i !== 3 && p.material !== 'bridge' ? [i] : []);
+    const crumbleSlot = crumbleCandidates[section % Math.max(1, crumbleCandidates.length)];
     for (let slot = 0; slot < platforms.length; slot++) {
         const p = platforms[slot];
         if (p.material === 'bridge') {
@@ -21,7 +24,6 @@ export function terrainPieces(platforms: readonly TerrainPlatform[], section: nu
         } else {
             // Don't crumble the permanent perches used by Pyromancers / chests
             // (slots 1 and 3) or the player's first few learning sections.
-            const crumbleSlot = section % 2 === 0 ? 2 : 4;
             pieces.push(section >= 4 && slot === crumbleSlot ? {
                 ...p, feature: 'crumble'
             } : { ...p });
