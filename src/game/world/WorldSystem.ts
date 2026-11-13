@@ -265,20 +265,27 @@ export class WorldSystem {
         for (const piece of terrainPieces(data.platforms, section)) {
             if (piece.feature !== 'crumble') continue;
             const state = this.mutable.get(piece.id) ?? {};
+            // Once triggered, the warning countdown continues even if the
+            // player jumps away. No delayed surprise collapse on returning.
+            if (state.triggerAt !== undefined && this.clock - state.triggerAt >= 0.8) {
+                state.breakUntil = state.triggerAt + 4.8;
+                state.triggerAt = undefined;
+            }
             if (state.breakUntil !== undefined && this.clock >= state.breakUntil) {
-                state.breakUntil = undefined;
-                state.triggerAt = undefined;
                 this.mutable.delete(piece.id);
+                // If the hero is standing at the regeneration point, arm it
+                // again on the following step rather than instantly breaking.
+                continue;
             }
-            if (state.breakUntil !== undefined) continue;
-            if (Math.abs(playerX - piece.x) > piece.width / 2 - 4 ||
-                Math.abs(foot - (this.groundY - piece.height)) > 3) continue;
-            if (state.triggerAt === undefined) state.triggerAt = this.clock;
-            if (this.clock - state.triggerAt >= 0.8) {
-                state.breakUntil = this.clock + 4;
-                state.triggerAt = undefined;
+            if (state.breakUntil !== undefined) {
+                this.mutable.set(piece.id, state);
+                continue;
             }
-            this.mutable.set(piece.id, state);
+            if (Math.abs(playerX - piece.x) <= piece.width / 2 - 4 &&
+                Math.abs(foot - (this.groundY - piece.height)) <= 3) {
+                if (state.triggerAt === undefined) state.triggerAt = this.clock;
+                this.mutable.set(piece.id, state);
+            }
         }
     }
 
