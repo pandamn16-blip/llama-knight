@@ -29,7 +29,7 @@ export class ArcherSystem {
 
     constructor(private scene: Scene, private run: RunState,
         private groundY: number, private player: Pick<Player, 'x' | 'y'>,
-        private onArrowHit: (arrowX: number) => void, private onKilled: (x: number, y: number) => void) {
+        private onArrowHit: (sourceDirection: -1 | 1) => void, private onKilled: (x: number, y: number) => void) {
         scene.events.once(Scenes.Events.SHUTDOWN, this.destroy, this);
     }
 
@@ -138,7 +138,7 @@ export class ArcherSystem {
                 fromY + vy * t - this.player.y) < ARCHER.arrowHitRadius;
             sprite.x = toX; sprite.y = toY;
             arrow.distance += distance;
-            if (hit) this.onArrowHit(sprite.x);
+            if (hit) this.onArrowHit(arrow.vx >= 0 ? -1 : 1);
             if (hit || arrow.distance >= ARCHER.projectileRange ||
                 sprite.x < camera.scrollX - 100 || sprite.x > camera.scrollX + camera.width + 100) {
                 sprite.destroy(); this.arrows.splice(i, 1);
