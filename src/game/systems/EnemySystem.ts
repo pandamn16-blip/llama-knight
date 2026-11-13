@@ -23,6 +23,10 @@ export class EnemySystem {
     private dying = new Set<Enemy>();
     private records = new Map<string, EnemyRecord>();
     private terrain?: Pick<WorldSystem, 'enemyHeadExposed'>;
+    private wallResolver?: (from: number, to: number, y: number) => number;
+    setWallResolver(resolver: (from: number, to: number, y: number) => number): void {
+        this.wallResolver = resolver;
+    }
     private immobilized: (id: string) => boolean = () => false;
     setImmobilized(check: (id: string) => boolean): void { this.immobilized = check; }
 
@@ -224,6 +228,7 @@ export class EnemySystem {
             else if (to < from && from >= this.player.x)
                 to = Math.max(to, Math.min(from, this.player.x + BALANCE.player.contactWidth));
         }
+        to = this.wallResolver?.(from, to, enemy.sprite.y) ?? to;
         enemy.sprite.x = to;
         return Math.abs(target - enemy.sprite.x) < 0.01;
     }
