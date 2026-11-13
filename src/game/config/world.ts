@@ -10,7 +10,7 @@ export const WORLD = {
     enemyStartX: 1069,
     enemySpacing: 640,
     maxCatchUpSeconds: 0.25,
-    debugOverlay: true,
+    debugOverlay: false,
     rosieDialogueInterval: 12000,
     rosieLineDuration: 3500
 } as const;

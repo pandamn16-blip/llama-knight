@@ -78,7 +78,7 @@ export class Game extends Phaser.Scene {
             (x, y) => this.xpSystem.dropGem(x, y), () => this.endGame(), () => this.updateHud(), () => this.rosie.speak('damage'));
 
         this.hud = new Hud(this);
-        if (WORLD.debugOverlay) {
+        if (import.meta.env.DEV && WORLD.debugOverlay) {
             this.debug = new WorldDebug(this);
             this.debug.resetSample(this.player, this.cameras.main);
         }

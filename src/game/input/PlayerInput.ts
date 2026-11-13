@@ -1,5 +1,6 @@
 import { Input, Scenes } from 'phaser';
-import type { Scene, Types } from 'phaser';
+import type { Scene, Types, GameObjects } from 'phaser';
+import { isMobileLayout, onLayoutResize } from '../ui/layout';
 
 export type PlayerActions = { left: boolean; right: boolean; jump: boolean; attack: boolean };
 
@@ -11,6 +12,7 @@ export class PlayerInput {
     private touches: Record<TouchAction, Set<number>> = {
         left: new Set(), right: new Set(), jump: new Set(), attack: new Set()
     };
+    private joystick?: { base: GameObjects.Arc; thumb: GameObjects.Arc; pointerId?: number };
     private cleanups: (() => void)[] = [];
 
     constructor(private scene: Scene, private isPlaying: () => boolean) {
@@ -19,10 +21,30 @@ export class PlayerInput {
         this.keys = scene.input.keyboard!.addKeys('A,D,W,J,R,M,ONE,TWO,THREE') as typeof this.keys;
         scene.input.keyboard!.addCapture(['SPACE', 'UP', 'DOWN', 'LEFT', 'RIGHT']);
 
-        this.makeTouchButton(66, height - 68, '◀', 'left');
-        this.makeTouchButton(154, height - 68, '▶', 'right');
-        this.makeTouchButton(width - 174, height - 68, 'JUMP', 'jump');
-        this.makeTouchButton(width - 70, height - 68, 'ATK', 'attack');
+        const mobile = isMobileLayout();
+        if (!mobile) {
+            this.makeTouchButton(66, height - 68, '◀', 'left');
+            this.makeTouchButton(154, height - 68, '▶', 'right');
+        }
+        const jump = this.makeTouchButton(width - (mobile ? 264 : 174), height - (mobile ? 112 : 68), 'JUMP', 'jump', mobile);
+        const attack = this.makeTouchButton(width - (mobile ? 102 : 70), height - (mobile ? 112 : 68), 'ATK', 'attack', mobile);
+        if (mobile) {
+            this.makeJoystick(height);
+            const move = (pointer: Input.Pointer) => this.moveJoystick(pointer);
+            scene.input.on('pointermove', move);
+            this.cleanups.push(() => scene.input.off('pointermove', move));
+        }
+        this.cleanups.push(onLayoutResize(scene, () => {
+            this.clearAll();
+            const { width, height } = scene.scale;
+            const y = height - (mobile ? 112 : 68);
+            jump.button.setPosition(width - (mobile ? 264 : 174), y); jump.label.setPosition(jump.button.x, y);
+            attack.button.setPosition(width - (mobile ? 102 : 70), y); attack.label.setPosition(attack.button.x, y);
+            if (this.joystick) {
+                this.joystick.base.y = height - 126;
+                this.joystick.thumb.setPosition(this.joystick.base.x, this.joystick.base.y);
+            }
+        }));
 
         const release = (pointer: Input.Pointer) => this.releasePointer(pointer);
         const leaveCanvas = () => this.releasePointer(scene.input.mousePointer);
@@ -69,6 +91,10 @@ export class PlayerInput {
 
     clearTouch(): void {
         for (const pointers of Object.values(this.touches)) pointers.clear();
+        if (this.joystick) {
+            this.joystick.pointerId = undefined;
+            this.joystick.thumb.setPosition(this.joystick.base.x, this.joystick.base.y);
+        }
     }
 
     clearAll(): void {
@@ -78,6 +104,10 @@ export class PlayerInput {
 
     private releasePointer(pointer: Input.Pointer): void {
         for (const pointers of Object.values(this.touches)) pointers.delete(pointer.id);
+        if (this.joystick?.pointerId === pointer.id) {
+            this.joystick.pointerId = undefined;
+            this.joystick.thumb.setPosition(this.joystick.base.x, this.joystick.base.y);
+        }
     }
 
     destroy(): void {
@@ -89,9 +119,9 @@ export class PlayerInput {
     }
 
     private makeTouchButton(x: number, y: number, label: string,
-        action: 'left' | 'right' | 'jump' | 'attack') {
-        const button = this.scene.add.circle(x, y, 35, 0x25263f, 0.74).setDepth(30).setScrollFactor(0).setInteractive();
-        this.scene.add.text(x, y, label, { fontSize: label.length > 2 ? '13px' : '25px', color: '#ffffff' })
+        action: 'left' | 'right' | 'jump' | 'attack', mobile = false) {
+        const button = this.scene.add.circle(x, y, mobile ? 70 : 35, 0x25263f, 0.74).setDepth(30).setScrollFactor(0).setInteractive();
+        const text = this.scene.add.text(x, y, label, { fontSize: mobile ? '28px' : label.length > 2 ? '13px' : '25px', color: '#ffffff' })
             .setOrigin(0.5).setDepth(31).setScrollFactor(0);
         const press = (pointer: Input.Pointer) => {
             if (this.isPlaying()) this.touches[action].add(pointer.id);
@@ -105,6 +135,33 @@ export class PlayerInput {
             button.off('pointerup', release);
             button.off('pointerout', release);
         });
+        return { button, label: text };
+    }
+
+    private makeJoystick(height: number): void {
+        const base = this.scene.add.circle(128, height - 126, 96, 0x25263f, 0.65)
+            .setStrokeStyle(3, 0xd6e4ec).setDepth(30).setScrollFactor(0).setInteractive();
+        const thumb = this.scene.add.circle(base.x, base.y, 40, 0xe5f1f4, 0.85).setDepth(31).setScrollFactor(0);
+        this.joystick = { base, thumb };
+        const press = (pointer: Input.Pointer) => {
+            if (!this.isPlaying() || this.joystick!.pointerId !== undefined) return;
+            this.joystick!.pointerId = pointer.id;
+            this.moveJoystick(pointer);
+        };
+        base.on('pointerdown', press);
+        this.cleanups.push(() => base.off('pointerdown', press));
+    }
+
+    private moveJoystick(pointer: Input.Pointer): void {
+        const stick = this.joystick;
+        if (!stick || stick.pointerId !== pointer.id || !this.isPlaying()) return;
+        const dx = pointer.x - stick.base.x;
+        stick.thumb.x = stick.base.x + Math.max(-56, Math.min(56, dx));
+        this.touches.left.delete(pointer.id);
+        this.touches.right.delete(pointer.id);
+        // Binary direction preserves the existing speed: no new acceleration or analogue multiplier.
+        if (dx < -18) this.touches.left.add(pointer.id);
+        if (dx > 18) this.touches.right.add(pointer.id);
     }
 
 }

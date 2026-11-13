@@ -4,6 +4,7 @@ import { WORLD } from '../config/world';
 import { getRosieLine } from '../dialogue/rosieDialogue';
 import type { RunState } from '../state/RunState';
 import type { RosieEvent } from '../dialogue/rosieDialogue';
+import { isMobileLayout, onLayoutResize } from '../ui/layout';
 
 export class Rosie {
     private panel: GameObjects.Container;
@@ -21,6 +22,13 @@ export class Rosie {
         });
         this.panel.add([portrait, face, this.speech]);
         this.panel.setScrollFactor(0, 0, true);
+        const layout = () => {
+            const mobile = isMobileLayout();
+            this.panel.setPosition(scene.scale.width - (mobile ? 450 : 300), 18).setScale(mobile ? 1.5 : 1);
+            this.speech.setFontSize(mobile ? 18 : 14);
+        };
+        layout();
+        onLayoutResize(scene, layout);
         this.tauntTimer = scene.time.addEvent({ delay: WORLD.rosieDialogueInterval, loop: true, callback: () => {
             if (run.phase === 'playing') this.speak('taunt');
         }});

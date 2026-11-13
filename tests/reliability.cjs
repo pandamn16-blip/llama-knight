@@ -15,8 +15,9 @@ const screenOrientation = Object.assign(new EventEmitter(), {
     addEventListener(event, fn) { this.on(event, fn); },
     removeEventListener(event, fn) { this.off(event, fn); }
 });
+let mobileLayout = false;
 const windowStub = Object.assign(new EventEmitter(), {
-    matchMedia: () => orientation, screen: { orientation: screenOrientation },
+    matchMedia: query => query === '(orientation: portrait)' ? orientation : { matches: mobileLayout }, screen: { orientation: screenOrientation },
     addEventListener(event, fn) { this.on(event, fn); },
     removeEventListener(event, fn) { this.off(event, fn); }
 });
@@ -34,7 +35,7 @@ const phaser = {
     Game: class {
         constructor(config) {
             this.config = config; this.events = new EventEmitter(); this.isBooted = true;
-            this.refreshes = 0; this.scale = { refresh: () => this.refreshes++ };
+            this.refreshes = 0; this.scale = { width: config.width, height: config.height, refresh: () => this.refreshes++, getParentBounds() {}, setGameSize: (width, height) => { this.scale.width = width; this.scale.height = height; } };
         }
     },
     Input: { Keyboard: { JustDown(key) { const value = key._justDown; key._justDown = false; return value; } } },
@@ -50,7 +51,7 @@ function load(name, baseUrl = '/') {
     const exports = {};
     const source = fs.readFileSync(path.join(__dirname, '../src/game', `${name}.ts`), 'utf8');
     // Vite replaces this expression at build time; emulate it in the CommonJS VM.
-    const code = ts.transpileModule(source.replaceAll('import.meta.env.BASE_URL', JSON.stringify(baseUrl)), {
+    const code = ts.transpileModule(source.replaceAll('import.meta.env.BASE_URL', JSON.stringify(baseUrl)).replaceAll('import.meta.env.DEV', 'true'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
     }).outputText;
     vm.runInNewContext(code, {
@@ -96,16 +97,20 @@ function fixture(characterId = 'llamaCrunch') {
             },
             setVisible(value) { this.visible = value; return this; },
             setDepth() { return this; }, setStrokeStyle() { return this; },
+            setPosition(x, y) { this.x = x; this.y = y; return this; },
+            setScale(x, y = x) { this.scaleX = x; this.scaleY = y; return this; },
+            setFontSize(size) { this.fontSize = size; return this; },
+            removeAll(destroy) { if (destroy) this.children.forEach(child => child.destroy()); this.children = []; this.list = this.children; return this; },
             setAngle() { return this; }, setOrigin() { return this; }, setInteractive() { return this; },
             add(children) { this.children.push(...[].concat(children)); this.list = this.children; return this; },
             setAlpha(value) { this.alpha = value; return this; },
             setText(value) { this.text = value; this.textChanges++; return this; },
-            destroy() { this.active = false; this.removeAllListeners(); this.children.forEach(child => child.destroy()); }
+            destroy() { if (!this.active) return; this.active = false; this.emit('destroy'); this.removeAllListeners(); this.children.forEach(child => child.destroy()); }
         });
         objects.push(item);
         return item;
     }
-    game.scale = { width: 1024, height: 768 };
+    game.scale = Object.assign(new EventEmitter(), { width: 1024, height: 768 });
     game.events = new EventEmitter();
     game.game = { events: new EventEmitter() };
     game.transitions = [];
@@ -605,7 +610,7 @@ const { CharacterSelect } = load('scenes/CharacterSelect');
 for (const method of ['pointer', 'keyboard', 'direct']) {
     const { game: host, objects } = fixture();
     const select = new CharacterSelect();
-    Object.assign(select, { add: host.add, cameras: host.cameras, scene: host.scene });
+    Object.assign(select, { add: host.add, cameras: host.cameras, scene: host.scene, scale: host.scale, events: host.events });
     installKeyboard(select); select.create();
     if (method === 'pointer') {
         const cards = objects.filter(object => object.kind === 'rectangle' && object.eventNames().includes('pointerdown'));
@@ -1841,4 +1846,118 @@ console.log('PASS endless foundation: seeded sections, unbounded forward movemen
     const b = g.enemySystem.spawnBread(2000, 'test:placement:b');
     assert.notEqual(a, b); assert.equal(g.enemySystem.records.size, 3);
     g.events.emit('shutdown');
+}
+
+// Mobile widens the view without changing vertical world units or desktop FIT layout.
+{
+    const { viewportWidth } = load('ui/layout');
+    for (const [width, height] of [[844, 390], [852, 393], [932, 430], [915, 412], [740, 360]]) {
+        assert.ok(Math.abs(viewportWidth(width, height, true) * height / 768 - width) < 1);
+        assert.equal(viewportWidth(width, height, false), 1024);
+    }
+    assert.equal(viewportWidth(390, 844, true), 1024);
+    mobileLayout = true;
+    parentElement.clientWidth = 750; parentElement.clientHeight = 369; // safe-area-adjusted parent
+    const engine = load('main').default('game-container');
+    assert.equal(engine.config.height, 768);
+    assert.equal(engine.config.width, viewportWidth(750, 369, true));
+    const resize = observers.at(-1);
+    const refreshOrder = [];
+    engine.scale.getParentBounds = () => refreshOrder.push('parent');
+    const setSize = engine.scale.setGameSize;
+    engine.scale.setGameSize = (...args) => { refreshOrder.push('size'); setSize(...args); };
+    parentElement.clientWidth = 820; parentElement.clientHeight = 370; resize.callback();
+    assert.equal(engine.scale.width, viewportWidth(820, 370, true));
+    assert.equal(engine.scale.height, 768);
+    assert.deepEqual(refreshOrder, ['parent', 'size']);
+    engine.events.emit('destroy'); assert.equal(resize.disconnected, true);
+    delete parentElement.clientWidth; delete parentElement.clientHeight;
+    mobileLayout = false;
+}
+
+// Joystick has one independent owner, binary full-speed direction, a neutral zone and clean release.
+mobileLayout = true;
+for (let cycle = 0; cycle < 10; cycle++) {
+    const { game: g, objects } = fixture(); installKeyboard(g);
+    g.scale.width = 1662; g.cameras.main.width = 1662;
+    const input = new PlayerInput(g, () => g.run.phase === 'playing');
+    g.playerInput = input; g.bindPauseEvents();
+    const joystick = input.joystick;
+    const actions = objects.filter(object => object.kind === 'circle' && object.args[0] === 70);
+    const jump = actions[0], attack = actions[1];
+    const p1 = { id: 1, x: 128, y: 642 }, p2 = { id: 2 }, p3 = { id: 3 };
+    joystick.base.emit('pointerdown', p1); assert.equal(input.readActions().right, false);
+    g.input.emit('pointermove', { ...p1, x: 144 }); assert.equal(input.readActions().right, false);
+    g.input.emit('pointermove', { ...p1, x: 175 }); assert.equal(input.readActions().right, true);
+    jump.emit('pointerdown', p2); attack.emit('pointerdown', p3);
+    assert.equal(input.readActions().jump, true); assert.equal(input.readActions().attack, true);
+    joystick.base.emit('pointerdown', { id: 4, x: 50 });
+    g.input.emit('pointermove', { id: 4, x: 50 }); assert.equal(input.readActions().right, true);
+    g.input.emit('pointermove', { ...p1, x: 20 });
+    assert.equal(input.readActions().left, true); assert.equal(input.readActions().right, false);
+    // Moving beyond the circle keeps ownership until that finger lifts/cancels.
+    joystick.base.emit('pointerout', p1); assert.equal(input.readActions().left, true);
+    g.input.emit('pointerup', p2);
+    assert.equal(input.readActions().jump, false); assert.equal(input.readActions().left, true);
+    assert.equal(input.readActions().attack, true);
+    g.input.emit('pointerupoutside', p1);
+    assert.equal(input.readActions().left, false); assert.equal(input.readActions().attack, true);
+    assert.equal(joystick.thumb.x, joystick.base.x);
+    g.input.emit('pointerup', p3); assert.equal(input.readActions().attack, false);
+    // Resize and interruption cancel all held inputs, without changing run stats/position.
+    joystick.base.emit('pointerdown', { ...p1, x: 180 });
+    const state = JSON.stringify(g.run);
+    g.scale.width = 1800; g.scale.emit('resize');
+    assert.equal(input.readActions().right, false); assert.equal(joystick.pointerId, undefined);
+    assert.equal(attack.x, 1698); assert.equal(JSON.stringify(g.run), state);
+    joystick.base.emit('pointerdown', { ...p1, x: 180 });
+    g.game.events.emit('blur'); g.game.events.emit('focus'); assert.equal(input.readActions().right, false);
+    joystick.base.emit('pointerdown', { ...p1, x: 180 });
+    orientation.matches = true; orientation.emit('change'); assert.equal(joystick.pointerId, undefined);
+    orientation.matches = false; orientation.emit('change'); assert.equal(g.run.phase, 'playing');
+    g.run.xp = 3; g.xpSystem.checkLevelUp(); joystick.base.emit('pointerdown', { ...p1, x: 180 });
+    assert.equal(input.readActions().right, false); g.chooseUpgrade(0);
+    g.events.emit('shutdown'); assert.equal(g.input.listenerCount('pointermove'), 0);
+    assert.equal(g.scale.listenerCount('resize'), 0); assert.equal(joystick.pointerId, undefined);
+    assert.equal(orientation.listenerCount('change'), 0);
+}
+
+// Mobile HUD omits desktop instructions; modals redraw without accumulating click targets.
+{
+    const { game: g, objects } = fixture(); g.scale.width = 1662;
+    const { Hud } = load('ui/Hud'), hud = new Hud(g); hud.update(g.run, 3);
+    const hudText = hud.text.text.join('\n');
+    assert.ok(hudText.includes('♥ 6/6')); assert.ok(hudText.includes('XP 0/3')); assert.ok(hudText.includes('Sword Slash'));
+    assert.ok(!hudText.includes('J =')); assert.equal(hud.text.args[1].fontSize, '32px');
+    const { createUpgradePanel } = load('ui/UpgradePanel'); let chosen;
+    const panel = createUpgradePanel(g, 2, [{ title: 'POWER', description: '+1 damage' }], index => chosen = index);
+    const previous = panel.children.find(child => child.eventNames().includes('pointerdown'));
+    for (const width of [1500, 1800, 1662]) { g.scale.width = width; g.scale.emit('resize'); }
+    assert.equal(previous.active, false);
+    const cards = panel.children.filter(child => child.eventNames().includes('pointerdown'));
+    assert.equal(cards.length, 1); assert.equal(cards[0].x, 831); assert.equal(cards[0].scrollFactorX, 0);
+    cards[0].emit('pointerdown'); assert.equal(chosen, 0);
+    panel.destroy();
+    assert.ok(!objects.some(object => object.active && object.eventNames().includes('pointerdown')));
+    g.events.emit('shutdown'); assert.equal(g.scale.listenerCount('resize'), 0);
+}
+mobileLayout = false;
+assert.equal(WORLD.debugOverlay, false);
+console.log('PASS mobile UX: aspect-preserving viewport sizing, independent joystick/jump/attack, dead zone, cancellation/resizing/rotation/10 restarts, readable fixed HUD/modals and debug off by default.');
+
+// Fullscreen is mobile/gesture opt-in at the menu and safely falls back when unavailable.
+{
+    const { requestMobileFullscreen } = load('ui/layout');
+    let requested = 0;
+    parentElement.requestFullscreen = options => { requested++; assert.equal(options.navigationUI, 'hide'); return Promise.reject(new Error('Unavailable')); };
+    documentStub.fullscreenEnabled = true;
+    requestMobileFullscreen(); assert.equal(requested, 0); // desktop
+    mobileLayout = true; documentStub.fullscreenEnabled = false;
+    requestMobileFullscreen(); assert.equal(requested, 0);
+    documentStub.fullscreenEnabled = true;
+    requestMobileFullscreen(); assert.equal(requested, 1); // rejection has a handler
+    documentStub.fullscreenElement = {};
+    requestMobileFullscreen(); assert.equal(requested, 1);
+    delete documentStub.fullscreenEnabled; delete documentStub.fullscreenElement; delete parentElement.requestFullscreen;
+    mobileLayout = false;
 }

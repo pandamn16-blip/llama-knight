@@ -1,4 +1,5 @@
 import { Scene, GameObjects, Input } from 'phaser';
+import { isMobileLayout, onLayoutResize, requestMobileFullscreen } from '../ui/layout';
 
 export class MainMenu extends Scene
 {
@@ -25,11 +26,18 @@ export class MainMenu extends Scene
         }).setOrigin(0.5);
 
         this.keys = this.input.keyboard!.addKeys('ENTER,SPACE') as typeof this.keys;
-        this.add.text(512, 540, 'TAP OR PRESS ENTER TO CHOOSE A HERO', {
-            fontSize: '20px', color: '#ffffff', backgroundColor: '#151527', padding: { x: 12, y: 8 }
+        const hint = this.add.text(512, 540, isMobileLayout() ? 'TAP TO CHOOSE A HERO' : 'TAP OR PRESS ENTER TO CHOOSE A HERO', {
+            fontSize: isMobileLayout() ? '32px' : '20px', color: '#ffffff', backgroundColor: '#151527', padding: { x: 12, y: 8 }
         }).setOrigin(0.5);
 
+        const layout = () => {
+            const centre = this.scale.width / 2;
+            this.background.setPosition(centre, 384).setScale(isMobileLayout() ? Math.max(1, this.scale.width / 1024) : 1);
+            this.logo.x = this.title.x = hint.x = centre;
+        };
+        layout(); onLayoutResize(this, layout);
         this.input.once('pointerdown', () => {
+            requestMobileFullscreen();
 
             this.scene.start('CharacterSelect');
 
