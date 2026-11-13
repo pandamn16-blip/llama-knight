@@ -38,7 +38,7 @@ export const PYROMANCER_BONK = {
 } as const;
 export const PYROMANCER_DEATH = {
     ...character, key: 'pyromancer:death', animationKey: 'pyromancer:death',
-    path: 'enemies/pyromancer-pancake/death.png', fps: 9, repeat: 0
+    path: 'enemies/pyromancer-pancake/death.png', fps: 4, repeat: 0
 } as const;
 export const PYROMANCER_FIREBALL = {
     ...character, key: 'pyromancer:fireball', animationKey: 'pyromancer:fireball',
