@@ -2772,3 +2772,35 @@ console.log('PASS stationary shield: no horizontal movement or jumping, immediat
     fire.destroy(); g.events.emit('shutdown');
     console.log('PASS enemy standing: Bread head landing, harmless contact, active upward attack, Pyromancer fire with cooldown.');
 }
+
+
+// A player standing on an elevated ledge cannot accidentally land on a Bread
+// Roll underneath it, and attacks from underneath may not pass through ledges.
+{
+    const { game: g } = fixture();
+    const { EnemySystem } = load('systems/EnemySystem');
+    const { BREAD } = load('enemies/bread');
+    const { BALANCE } = load('config/balance');
+    const breadSystem = new EnemySystem(g, g.run, g.groundY);
+    const bread = breadSystem.spawnBread(700);
+    const head = bread.sprite.y - BREAD.standHeight;
+    breadSystem.setTerrain({ enemyHeadExposed: () => false });
+    assert.equal(breadSystem.landingY(bread.sprite.x, head - 12, head + 15), undefined,
+        'Hidden Bread cannot be landed on through a ledge');
+    assert.equal(breadSystem.standingY(bread.sprite.x, head), undefined,
+        'Hidden Bread cannot support the player on a ledge');
+    assert.equal(breadSystem.isPlayerStandingOn(bread, bread.sprite.x,
+        head - BALANCE.player.groundOffset), false, 'Hidden Bread cannot attack via head contact');
+    const player = g.player;
+    player.x = bread.sprite.x;
+    player.y = bread.sprite.y - 105;
+    g.combatSystem.player = player;
+    g.combatSystem.setTerrain({ terrainImpact: () => ({ x: bread.sprite.x, y: bread.sprite.y - 60, t: 0.5 }) });
+    bread.brain.state = 'active'; bread.brain.remaining = 0.1;
+    const hp = g.run.health;
+    assert.equal(g.combatSystem.resolveEnemyAttack(bread), false,
+        'Bread strike is intercepted by the platform');
+    assert.equal(g.run.health, hp);
+    breadSystem.destroy(); g.events.emit('shutdown');
+    console.log('PASS terrain obscures covered Bread heads and blocks attacks through ledges.');
+}
