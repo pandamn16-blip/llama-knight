@@ -173,6 +173,7 @@ export class Game extends Phaser.Scene {
         if (phase !== 'playing') this.player.setShielding(false);
         this.player.setVisualPhase(phase);
         this.enemySystem.setPhase(phase);
+        this.archerSystem?.setPhase(phase);
         this.combatSystem.setVisualPhase(phase);
         const frozen = phase !== 'playing';
         this.time.paused = frozen;
