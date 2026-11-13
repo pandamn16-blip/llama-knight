@@ -3,6 +3,8 @@ import { BALANCE } from '../config/balance';
 import { STRUCTURES } from '../config/structures';
 import { generatePlatforms } from './terrain';
 import type { TerrainPlatform } from './terrain';
+import { generateLandmarks } from './landmarks';
+import type { Landmark } from './landmarks';
 
 // Plain section data: generating the same index/seed never depends on travel order.
 export interface WorldSection {
@@ -15,6 +17,7 @@ export interface WorldSection {
     enemies: BreadPlacement[];
     structures: StructurePlacement[];
     platforms: TerrainPlatform[];
+    landmarks: Landmark[];
 }
 
 // Content identity is separate from position, so later layouts may place different
@@ -72,7 +75,8 @@ export function generateSection(index: number, runSeed: number): WorldSection {
     }
     return { id: `${runSeed >>> 0}:${index}`, index, startX, endX,
         seed: sectionSeed(runSeed, index), sceneryXs, enemies, structures,
-        platforms };
+        platforms,
+        landmarks: generateLandmarks(index, runSeed, sectionSeed(runSeed ^ 0x4c414e44, index)) };
 }
 
 export function sectionWindow(scrollX: number, width: number, viewports: number): { first: number; last: number } {
