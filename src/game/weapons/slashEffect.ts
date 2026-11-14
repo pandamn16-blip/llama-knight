@@ -10,7 +10,7 @@ export const SWORD_SLASH_EFFECT = {
 export const CANDY_PROJECTILE_EFFECT = {
     key: 'weapon:candy-projectile', path: 'characters/candy/projectile.png',
     width: 1536, height: 256, frameWidth: 256, frameHeight: 256,
-    animationKey: 'weapon:candy-projectile:play', start: 0, end: 5, fps: 16, repeat: -1
+    animationKey: 'weapon:candy-projectile:impact', start: 4, end: 5, fps: 16, repeat: 0
 } as const;
 
 export function hasCandyProjectileEffect(scene: Scene): boolean {
