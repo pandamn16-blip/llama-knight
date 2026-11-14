@@ -25,9 +25,11 @@ export function loadWeaponEffects(scene: Scene): void {
         startFrame: effect.start, endFrame: effect.end
     });
     const candy = CANDY_PROJECTILE_EFFECT;
+    // The impact clip uses frames 5-6, but flight explicitly displays
+    // frames 1-4. Phaser must load the entire six-frame texture.
     scene.load.spritesheet(candy.key, candy.path, {
         frameWidth: candy.frameWidth, frameHeight: candy.frameHeight,
-        startFrame: candy.start, endFrame: candy.end
+        startFrame: 0, endFrame: 5
     });
 }
 
