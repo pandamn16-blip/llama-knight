@@ -38,6 +38,7 @@ export class Player {
     }
     showHurt(): void { this.visual.showAction('hurt'); }
     showDeath(): void { this.visual.showAction('death'); }
+    showLevelUp(): void { this.visual.showLevelUp(); }
     setVisualPhase(phase: RunPhase): void { this.visual.setPhase(phase); }
 
     update(actions: Pick<PlayerActions, 'left' | 'right' | 'jump'>, dt: number,
