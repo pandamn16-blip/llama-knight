@@ -68,6 +68,18 @@ export const CHARACTER_SPRITES: Partial<Record<CharacterVisual, CharacterSpriteS
     }
 };
 
+// Optional celebration animation; not required for the character to load.
+export const CANDY_LEVELUP = {
+    key: 'candy-levelup', path: 'characters/candy/levelup.png',
+    width: 1536, height: 256, frameWidth: 256, frameHeight: 256,
+    start: 0, end: 5, fps: 12, repeat: 0
+} as const;
+
+export function hasCandyLevelUp(scene: Scene): boolean {
+    return hasSpriteFrames(scene, CANDY_LEVELUP, CANDY_LEVELUP) &&
+        scene.anims.exists('candy:levelup');
+}
+
 export function resolveCharacterAnimation(scene: Scene, pack: CharacterSpriteSheet, state: PlayerAnimation) {
     const clip = pack.animations[state];
     if (!clip) return undefined;
@@ -97,6 +109,7 @@ export function loadCharacterSheets(scene: Scene): void {
             }
         }
     }
+    sources.set(CANDY_LEVELUP.key, { source: CANDY_LEVELUP, end: CANDY_LEVELUP.end });
     for (const { source, end } of sources.values()) {
         scene.load.spritesheet(source.key, source.path, {
             frameWidth: source.frameWidth, frameHeight: source.frameHeight, startFrame: 0, endFrame: end
@@ -105,6 +118,13 @@ export function loadCharacterSheets(scene: Scene): void {
 }
 
 export function registerCharacterAnimations(scene: Scene): void {
+    if (hasSpriteFrames(scene, CANDY_LEVELUP, CANDY_LEVELUP) && !scene.anims.exists('candy:levelup')) {
+        scene.anims.create({ key: 'candy:levelup',
+            frames: scene.anims.generateFrameNumbers(CANDY_LEVELUP.key,
+                { start: CANDY_LEVELUP.start, end: CANDY_LEVELUP.end }),
+            frameRate: CANDY_LEVELUP.fps, repeat: CANDY_LEVELUP.repeat
+        });
+    }
     for (const pack of Object.values(CHARACTER_SPRITES)) {
         if (!hasCharacterSheet(scene, pack)) continue; // Incomplete packs retain the placeholder.
         for (const state of Object.keys(pack.animations) as PlayerAnimation[]) {
