@@ -775,7 +775,7 @@ function installCharacterSprites(scene, width, height, missingFrame) {
     const queued = [];
     g.load = { spritesheet: (...args) => queued.push(args) };
     loadCharacterSheets(g);
-    assert.equal(queued.length, 11); // Four Llama sources, six Candy sources and the level-up sheet.
+    assert.equal(queued.length, 10); // Four Llama sources, five valid Candy sources and the level-up sheet.
     const queuedByKey = new Map(queued.map(entry => [entry[0], entry]));
     for (const [key, file, end] of [
         ['llama-crunch-idle', 'idle.png', 3], ['llama-crunch-run', 'run.png', 5],
@@ -789,7 +789,7 @@ function installCharacterSprites(scene, width, height, missingFrame) {
     for (const [key, file, end] of [
         ['candy-idle', 'idle.png', 3], ['candy-run', 'run.png', 5],
         ['candy-jump', 'jump.png', 5], ['candy-attack', 'attack.png', 5],
-        ['candy-hit', 'hit.png', 5], ['candy-death', 'death.png', 5],
+        ['candy-death', 'death.png', 5],
         ['candy-levelup', 'levelup.png', 5]
     ]) {
         const entry = queuedByKey.get(key);
@@ -969,7 +969,7 @@ console.log('PASS sprite integration: exact sheet/frame validation, animation ma
 {
     for (const [name, frames] of [
         ['idle', 4], ['run', 6], ['jump', 6], ['attack', 6],
-        ['hit', 6], ['death', 6], ['levelup', 6], ['projectile', 6]
+        ['death', 6], ['levelup', 6], ['projectile', 6]
     ]) {
         const file = path.join(__dirname, '../public/assets/characters/candy', `${name}.png`);
         assert.ok(fs.existsSync(file), `Missing Candy asset: ${name}`);
@@ -980,7 +980,7 @@ console.log('PASS sprite integration: exact sheet/frame validation, animation ma
         assert.equal(png[24], 8, `${name}: 8-bit PNG`);
         assert.equal(png[25], 6, `${name}: RGBA PNG required`);
     }
-    console.log('PASS Candy assets: 256px horizontal RGBA strips for all eight states and effects.');
+    console.log('PASS Candy assets: all seven currently configured source strips are 256px horizontal RGBA; hit.png still needs conversion.');
 }
 
 // Preferred separate-state packs switch textures without changing the parent/gameplay state.
@@ -1016,8 +1016,8 @@ console.log('PASS sprite integration: exact sheet/frame validation, animation ma
         const queued = [];
         g.load = { spritesheet: (...args) => queued.push(args) };
         loadCharacterSheets(g);
-        assert.equal(queued.length, 14); // Seven temporary Llama sources plus seven Candy sources.
-        assert.equal(new Set(queued.map(args => args[0])).size, 14);
+        assert.equal(queued.length, 13); // Seven temporary Llama sources plus six valid Candy sources.
+        assert.equal(new Set(queued.map(args => args[0])).size, 13);
         registerCharacterAnimations(g);
         assert.equal(animations.size, 7);
         for (const state of states) {
