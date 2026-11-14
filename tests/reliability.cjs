@@ -874,6 +874,7 @@ function installCharacterSprites(scene, width, height, missingFrame, selectedPac
     registerCharacterAnimations(g);
     const candy = CHARACTER_SPRITES.candy.animations;
     assert.equal(candy.run.fps, 8);
+    assert.equal(candy.idle.fps, 3);
     assert.equal(candy.jump.end, 3); assert.equal(candy.jump.repeat, 0);
     assert.equal(candy.fall.start, 4); assert.equal(candy.fall.end, 4);
     assert.equal(animations.get('candy:jump').frames.at(-1).frame, 3);
@@ -1285,6 +1286,14 @@ function installSlashEffect(scene) {
     assert.equal(queued[0][1], 'weapons/sword-slash/effect.png');
     assert.equal(queued[0][2].frameWidth, 256); assert.equal(queued[0][2].frameHeight, 256);
     assert.equal(queued[0][2].startFrame, 0); assert.equal(queued[0][2].endFrame, 4);
+    assert.equal(queued[1][0], 'weapon:candy-projectile');
+    assert.equal(queued[1][1], 'characters/candy/projectile.png');
+    assert.equal(queued[1][2].frameWidth, 256);
+    assert.equal(queued[1][2].frameHeight, 256);
+    // Regression: loading only impact frames 4-5 made the projectile invisible
+    // because the flight sprites explicitly request frames 0-3.
+    assert.equal(queued[1][2].startFrame, 0);
+    assert.equal(queued[1][2].endFrame, 5);
     const animation = animations.get(effect.animationKey);
     assert.equal(JSON.stringify(animation.frames.map(frame => frame.frame)), JSON.stringify([0, 1, 2, 3, 4]));
     assert.equal(animation.frameRate, 18); assert.equal(animation.repeat, 0);
