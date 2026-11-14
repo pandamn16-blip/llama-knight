@@ -143,7 +143,7 @@ function fixture(characterId = 'llamaCrunch') {
         setBackgroundColor() {}, shakeEffect: { isRunning: false }, shake() { this.shakeEffect.isRunning = true; } } };
     game.groundY = 768 * 0.78;
     game.run = createRunState(characterId);
-    game.player = { facing: 1, x: 300, y: game.groundY - 40, sprite: shape('player', 300, game.groundY - 40), update() {}, setShielding(held) { game.run.shielding = held; }, showAttack() {}, showHurt() {}, showDeath() {}, setVisualPhase() {} };
+    game.player = { facing: 1, x: 300, y: game.groundY - 40, sprite: shape('player', 300, game.groundY - 40), update() {}, setShielding(held) { game.run.shielding = held; }, showAttack() {}, showHurt() {}, showDeath() {}, showLevelUp() {}, setVisualPhase() {} };
     game.run.startX = game.run.furthestX = game.player.x;
     game.playerInput = {
         clearTouch() {}, clearAll() {}, readActions: () => ({ left: false, right: false, jump: false, attack: false }),
