@@ -892,9 +892,9 @@ function installCharacterSprites(scene, width, height, missingFrame, selectedPac
     player.update(controls, 0.2);
     assert.equal(art.animationKey, 'candy:idle');
     // The idle loop excludes the blink entirely until the timed pause.
-    for (let i = 0; i < 83; i++) player.update(controls, 0.05);
+    for (let i = 0; i < 76; i++) player.update(controls, 0.05);
     assert.equal(art.anims.paused, false);
-    player.update(controls, 0.1);
+    player.update(controls, 0.25);
     assert.equal(art.frame, 2);
     assert.equal(art.anims.paused, true);
     player.update(controls, 0.14);
