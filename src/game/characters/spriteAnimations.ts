@@ -35,6 +35,36 @@ export const CHARACTER_SPRITES: Partial<Record<CharacterVisual, CharacterSpriteS
             hurt: { sheet: combined, start: 19, end: 21, fps: 18, repeat: 0 },
             death: { sheet: combined, start: 22, end: 26, fps: 10, repeat: 0 }
         }
+    },
+    candy: {
+        format: 'separate', key: 'candy',
+        scale: 0.5, originX: FOOT_ORIGIN.x, originY: FOOT_ORIGIN.y, offsetX: 0, offsetY: 40,
+        animations: {
+            idle: { start: 0, end: 3, fps: 6, repeat: -1,
+                sheet: { key: 'candy-idle', path: 'characters/candy/idle.png',
+                    width: 1024, height: 256, frameWidth: 256, frameHeight: 256 } },
+            run: { start: 0, end: 5, fps: 11, repeat: -1,
+                sheet: { key: 'candy-run', path: 'characters/candy/run.png',
+                    width: 1536, height: 256, frameWidth: 256, frameHeight: 256 } },
+            jump: { start: 0, end: 5, fps: 12, repeat: 0,
+                sheet: { key: 'candy-jump', path: 'characters/candy/jump.png',
+                    width: 1536, height: 256, frameWidth: 256, frameHeight: 256 } },
+            fall: { start: 3, end: 4, fps: 8, repeat: 0,
+                sheet: { key: 'candy-jump', path: 'characters/candy/jump.png',
+                    width: 1536, height: 256, frameWidth: 256, frameHeight: 256 } },
+            attack: { start: 0, end: 5, fps: 20, repeat: 0,
+                sheet: { key: 'candy-attack', path: 'characters/candy/attack.png',
+                    width: 1536, height: 256, frameWidth: 256, frameHeight: 256 } },
+            hurt: { start: 0, end: 5, fps: 12, repeat: 0,
+                sheet: { key: 'candy-hit', path: 'characters/candy/hit.png',
+                    width: 1536, height: 256, frameWidth: 256, frameHeight: 256 },
+                fallback: { sheet: { key: 'candy-idle', path: 'characters/candy/idle.png',
+                    width: 1024, height: 256, frameWidth: 256, frameHeight: 256 },
+                    start: 0, end: 0, fps: 12, repeat: 0 } },
+            death: { start: 0, end: 5, fps: 10, repeat: 0,
+                sheet: { key: 'candy-death', path: 'characters/candy/death.png',
+                    width: 1536, height: 256, frameWidth: 256, frameHeight: 256 } }
+        }
     }
 };
 
