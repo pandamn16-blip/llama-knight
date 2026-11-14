@@ -108,6 +108,10 @@ export function loadCharacterSheets(scene: Scene): void {
             }
         }
     }
+    // Candy's landing pose is frame 6 of jump.png (index 5). It is manually
+    // displayed after physics detects a landing, not part of a looping clip.
+    const candyJump = sources.get('candy-jump');
+    if (candyJump) candyJump.end = 5;
     sources.set(CANDY_LEVELUP.key, { source: CANDY_LEVELUP, end: CANDY_LEVELUP.end });
     for (const { source, end } of sources.values()) {
         scene.load.spritesheet(source.key, source.path, {
