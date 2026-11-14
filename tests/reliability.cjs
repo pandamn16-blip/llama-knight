@@ -747,7 +747,7 @@ function installCharacterSprites(scene, width, height, missingFrame, selectedPac
     scene.anims = {
         exists: key => animations.has(key),
         create: animation => animations.set(animation.key, animation),
-        generateFrameNumbers: (key, config) => Array.from({ length: config.end - config.start + 1 }, (_, index) => ({ key, frame: config.start + index }))
+        generateFrameNumbers: (key, config) => (config.frames ?? Array.from({ length: config.end - config.start + 1 }, (_, index) => config.start + index)).map(frame => ({ key, frame }))
     };
     scene.add.sprite = (x, y, key, frame) => {
         const sprite = scene.add.image(x, y, key, frame);
@@ -874,7 +874,8 @@ function installCharacterSprites(scene, width, height, missingFrame, selectedPac
     registerCharacterAnimations(g);
     const candy = CHARACTER_SPRITES.candy.animations;
     assert.equal(candy.run.fps, 8);
-    assert.equal(candy.idle.fps, 3);
+    assert.equal(candy.idle.fps, 5);
+    assert.deepEqual(animations.get('candy:idle').frames.map(f => f.frame), [0, 1, 3, 1]);
     assert.equal(candy.jump.end, 3); assert.equal(candy.jump.repeat, 0);
     assert.equal(candy.fall.start, 4); assert.equal(candy.fall.end, 4);
     assert.equal(animations.get('candy:jump').frames.at(-1).frame, 3);
@@ -890,8 +891,17 @@ function installCharacterSprites(scene, width, height, missingFrame, selectedPac
     assert.equal(art.textureKey, 'candy-jump'); assert.equal(art.frame, 5);
     player.update(controls, 0.2);
     assert.equal(art.animationKey, 'candy:idle');
+    // The idle loop excludes the blink entirely until the timed pause.
+    for (let i = 0; i < 83; i++) player.update(controls, 0.05);
+    assert.equal(art.anims.paused, false);
+    player.update(controls, 0.1);
+    assert.equal(art.frame, 2);
+    assert.equal(art.anims.paused, true);
+    player.update(controls, 0.14);
+    assert.equal(art.anims.paused, false);
+    assert.equal(art.frame, 0);
     player.showAttack();
-    assert.equal(art.scale, 0.6);
+    assert.equal(art.scale, 0.64);
     art.anims.isPlaying = false;
     player.update(controls, 0.01);
     assert.equal(art.scale, 0.5);
