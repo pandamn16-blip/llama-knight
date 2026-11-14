@@ -166,6 +166,7 @@ export class Game extends Phaser.Scene {
         this.upgradePanel?.destroy();
         this.upgradePanel = undefined;
         this.setPhase('playing');
+        this.player.showLevelUp();
         this.run.weapon.lastAttack = this.run.runTime * 1000;
         this.updateHud();
         this.xpSystem.checkLevelUp();
