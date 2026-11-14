@@ -775,7 +775,7 @@ function installCharacterSprites(scene, width, height, missingFrame) {
     const queued = [];
     g.load = { spritesheet: (...args) => queued.push(args) };
     loadCharacterSheets(g);
-    assert.equal(queued.length, 4);
+    assert.equal(queued.length, 11); // Four Llama sources, six Candy sources and the level-up sheet.
     const queuedByKey = new Map(queued.map(entry => [entry[0], entry]));
     for (const [key, file, end] of [
         ['llama-crunch-idle', 'idle.png', 3], ['llama-crunch-run', 'run.png', 5],
@@ -785,6 +785,19 @@ function installCharacterSprites(scene, width, height, missingFrame) {
         assert.equal(entry[1], `characters/llama-crunch/${file}`);
         assert.equal(entry[2].frameWidth, 256); assert.equal(entry[2].frameHeight, 256);
         assert.equal(entry[2].startFrame, 0); assert.equal(entry[2].endFrame, end);
+    }
+    for (const [key, file, end] of [
+        ['candy-idle', 'idle.png', 3], ['candy-run', 'run.png', 5],
+        ['candy-jump', 'jump.png', 5], ['candy-attack', 'attack.png', 5],
+        ['candy-hit', 'hit.png', 5], ['candy-death', 'death.png', 5],
+        ['candy-levelup', 'levelup.png', 5]
+    ]) {
+        const entry = queuedByKey.get(key);
+        assert.ok(entry, `Candy asset is loaded: ${key}`);
+        assert.equal(entry[1], `characters/candy/${file}`);
+        assert.equal(entry[2].frameWidth, 256);
+        assert.equal(entry[2].frameHeight, 256);
+        assert.equal(entry[2].endFrame, end);
     }
     let animations = installCharacterSprites(g, 2172, 724);
     registerCharacterAnimations(g);
@@ -984,7 +997,7 @@ console.log('PASS sprite integration: exact sheet/frame validation, animation ma
         const queued = [];
         g.load = { spritesheet: (...args) => queued.push(args) };
         loadCharacterSheets(g);
-        assert.equal(queued.length, 7);
+        assert.equal(queued.length, 14); // Seven temporary Llama sources plus seven Candy sources.
         assert.equal(new Set(queued.map(args => args[0])).size, 7);
         registerCharacterAnimations(g);
         assert.equal(animations.size, 7);
