@@ -9,7 +9,7 @@ import type { ArcherSystem, Archer } from './ArcherSystem';
 import type { WorldSystem } from '../world/WorldSystem';
 import type { StructureSystem, Crate } from './StructureSystem';
 import { WEAPONS } from '../weapons/definitions';
-import { SWORD_SLASH_EFFECT, hasSwordSlashEffect } from '../weapons/slashEffect';
+import { SWORD_SLASH_EFFECT, hasSwordSlashEffect, CANDY_PROJECTILE_EFFECT, hasCandyProjectileEffect } from '../weapons/slashEffect';
 
 type Projectile = { sprite: Phaser.GameObjects.Container; speed: number; remaining: number;
     damage: number; halfWidth: number; halfHeight: number; direction: -1 | 1 };
@@ -78,10 +78,20 @@ export class CombatSystem {
         const artworkIncludesSlash = this.player.showAttack();
         if (definition.kind === 'projectile') {
             const sprite = this.scene.add.container(this.player.x + 30 * direction, this.player.y).setDepth(7).setScrollFactor(1);
-            sprite.add([
-                this.scene.add.rectangle(0, 0, 20, 9, 0xffffff).setAngle(-20),
-                this.scene.add.circle(0, 0, 8, 0xef73b6).setStrokeStyle(2, 0x84e9ef)
-            ]);
+            if (hasCandyProjectileEffect(this.scene)) {
+                // The visual animates independently; the existing projectile container
+                // retains its collision position, speed, hitbox, and lifetime.
+                const effect = CANDY_PROJECTILE_EFFECT;
+                const image = this.scene.add.sprite(0, 0, effect.key, 0)
+                    .setOrigin(0.5).setScale(0.3).setFlipX(direction === -1);
+                sprite.add(image);
+                image.play(effect.animationKey);
+            } else {
+                sprite.add([
+                    this.scene.add.rectangle(0, 0, 20, 9, 0xffffff).setAngle(-20),
+                    this.scene.add.circle(0, 0, 8, 0xef73b6).setStrokeStyle(2, 0x84e9ef)
+                ]);
+            }
             this.projectiles.push({ sprite, speed: definition.projectileSpeed,
                 remaining: this.run.weapon.range, damage: this.run.weapon.damage,
                 halfWidth: definition.hitHalfWidth, halfHeight: definition.hitHalfHeight, direction });
