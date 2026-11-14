@@ -55,12 +55,11 @@ export const CHARACTER_SPRITES: Partial<Record<CharacterVisual, CharacterSpriteS
             attack: { start: 0, end: 5, fps: 20, repeat: 0,
                 sheet: { key: 'candy-attack', path: 'characters/candy/attack.png',
                     width: 1536, height: 256, frameWidth: 256, frameHeight: 256 } },
-            hurt: { start: 0, end: 5, fps: 12, repeat: 0,
-                sheet: { key: 'candy-hit', path: 'characters/candy/hit.png',
-                    width: 1536, height: 256, frameWidth: 256, frameHeight: 256 },
-                fallback: { sheet: { key: 'candy-idle', path: 'characters/candy/idle.png',
-                    width: 1024, height: 256, frameWidth: 256, frameHeight: 256 },
-                    start: 0, end: 0, fps: 12, repeat: 0 } },
+            // hit.png is an unconverted 2172px-wide source, not a 256px strip.
+            // Use a valid idle pose until that file is re-exported as 1536x256.
+            hurt: { start: 0, end: 0, fps: 12, repeat: 0,
+                sheet: { key: 'candy-idle', path: 'characters/candy/idle.png',
+                    width: 1024, height: 256, frameWidth: 256, frameHeight: 256 } },
             death: { start: 0, end: 5, fps: 10, repeat: 0,
                 sheet: { key: 'candy-death', path: 'characters/candy/death.png',
                     width: 1536, height: 256, frameWidth: 256, frameHeight: 256 } }
