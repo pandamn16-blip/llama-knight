@@ -40,7 +40,7 @@ export const CHARACTER_SPRITES: Partial<Record<CharacterVisual, CharacterSpriteS
         format: 'separate', key: 'candy',
         scale: 0.5, originX: FOOT_ORIGIN.x, originY: FOOT_ORIGIN.y, offsetX: 0, offsetY: 40,
         animations: {
-            idle: { start: 0, end: 3, fps: 6, repeat: -1,
+            idle: { start: 0, end: 3, fps: 3, repeat: -1,
                 sheet: { key: 'candy-idle', path: 'characters/candy/idle.png',
                     width: 1024, height: 256, frameWidth: 256, frameHeight: 256 } },
             run: { start: 0, end: 5, fps: 8, repeat: -1,
