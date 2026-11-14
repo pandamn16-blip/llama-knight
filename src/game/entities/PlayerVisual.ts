@@ -130,13 +130,13 @@ export class PlayerVisual {
         if (justLanded) this.landingSeconds = this.landingDuration;
         if (this.action && this.animated.anims.isPlaying) return;
         this.action = undefined;
-        // A finished casting action must never leave Candy enlarged in idle,
-        // including when the following animation state hasn't changed.
-        this.restoreScale();
+        // Keep the current visual size until its replacement frame is installed.
+        // Resetting scale here caused a one-frame shrink of the *attack art*
+        // when the casting animation finished while Candy was falling.
         if (candy && justLanded) {
-            this.restoreScale();
             this.animated.anims.stop();
             this.animated.setTexture('candy-jump', 5);
+            this.setVisualScale('fall');
             this.state = undefined;
             return;
         }
@@ -157,9 +157,8 @@ export class PlayerVisual {
         this.setDefending(false);
         if (this.sheet?.key === 'candy') this.resetIdleBlink();
         this.action = action;
-        // Casting artwork occupies less of its 256px cell than Candy's idle art.
-        // Adjust only its rendering scale; preserve player collision/physics.
-        if (this.sheet?.key === 'candy') this.animated.setScale(action === 'attack' ? this.sheet.scale * 1.28 : this.sheet.scale);
+        // Scale is switched by play(), together with the new texture/frame.
+        // Never shrink a still-visible casting pose during airborne transitions.
         return this.play(action, true);
     }
 
@@ -170,6 +169,7 @@ export class PlayerVisual {
         this.action = 'levelup';
         this.state = undefined;
         this.animated.play('candy:levelup', true);
+        this.setVisualScale('idle');
     }
 
     get attackIncludesWeaponEffect(): boolean {
@@ -214,8 +214,11 @@ export class PlayerVisual {
         this.blinkRemaining = 0;
     }
 
-    private restoreScale(): void {
-        if (this.animated && this.sheet?.key === 'candy') this.animated.setScale(this.sheet.scale);
+    private setVisualScale(state: PlayerAnimation): void {
+        if (!this.animated || this.sheet?.key !== 'candy') return;
+        // Keep the full-size casting artwork through the entire attack.
+        // Only change scale after a different animation has been installed.
+        this.animated.setScale(this.sheet.scale * (state === 'attack' ? 1.28 : 1));
     }
 
     private play(state: PlayerAnimation, restart = false): boolean {
@@ -223,8 +226,8 @@ export class PlayerVisual {
         const key = `${this.sheet.key}:${state}`;
         if (!this.scene.anims.exists(key)) return false;
         if (restart || this.state !== state) {
-            if (!restart) this.restoreScale();
             this.animated.play(key, !restart);
+            this.setVisualScale(state);
             this.state = state;
         }
         return true;
