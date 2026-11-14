@@ -964,6 +964,25 @@ console.log('PASS sprite integration: exact sheet/frame validation, animation ma
     }
 }
 
+// Candy must never silently fall back to the placeholder because a newly
+// uploaded PNG has the wrong dimensions or is not an RGBA 256px strip.
+{
+    for (const [name, frames] of [
+        ['idle', 4], ['run', 6], ['jump', 6], ['attack', 6],
+        ['hit', 6], ['death', 6], ['levelup', 6], ['projectile', 6]
+    ]) {
+        const file = path.join(__dirname, '../public/assets/characters/candy', `${name}.png`);
+        assert.ok(fs.existsSync(file), `Missing Candy asset: ${name}`);
+        const png = fs.readFileSync(file);
+        assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a', `${name}: PNG signature`);
+        assert.equal(png.readUInt32BE(16), frames * 256, `${name}: width must be ${frames} x 256`);
+        assert.equal(png.readUInt32BE(20), 256, `${name}: height must be 256`);
+        assert.equal(png[24], 8, `${name}: 8-bit PNG`);
+        assert.equal(png[25], 6, `${name}: RGBA PNG required`);
+    }
+    console.log('PASS Candy assets: 256px horizontal RGBA strips for all eight states and effects.');
+}
+
 // Preferred separate-state packs switch textures without changing the parent/gameplay state.
 {
     const { game: g } = fixture();
