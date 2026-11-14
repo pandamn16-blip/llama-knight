@@ -65,6 +65,10 @@ export class PlayerVisual {
     private wasAirborne = false;
     private landingSeconds = 0;
     private readonly landingDuration = 0.14;
+    private idleElapsed = 0;
+    private blinkRemaining = 0;
+    private nextBlinkAfter = 4.2;
+    private blinkCount = 0;
     private placeholderParts: { object: GameObjects.Shape; x: number; scaleX: number }[] = [];
 
     constructor(private scene: Scene, x: number, y: number, visual: CharacterVisual) {
@@ -142,17 +146,20 @@ export class PlayerVisual {
         }
         if (airborne) this.landingSeconds = 0;
         const state = airborne ? (run.velocityY < 0 ? 'jump' : 'fall') : moving ? 'run' : 'idle';
+        if (candy && state !== 'idle') this.resetIdleBlink();
         this.play(state);
+        if (candy && state === 'idle') this.advanceIdleBlink(dt);
     }
 
     showAction(action: 'attack' | 'hurt' | 'death'): boolean {
         if (!this.animated || this.action === 'death') return false;
         if (action === 'attack' && this.action === 'hurt' && this.animated.anims.isPlaying) return false;
         this.setDefending(false);
+        if (this.sheet?.key === 'candy') this.resetIdleBlink();
         this.action = action;
         // Casting artwork occupies less of its 256px cell than Candy's idle art.
         // Adjust only its rendering scale; preserve player collision/physics.
-        if (this.sheet?.key === 'candy') this.animated.setScale(action === 'attack' ? this.sheet.scale * 1.2 : this.sheet.scale);
+        if (this.sheet?.key === 'candy') this.animated.setScale(action === 'attack' ? this.sheet.scale * 1.28 : this.sheet.scale);
         return this.play(action, true);
     }
 
@@ -177,6 +184,34 @@ export class PlayerVisual {
             if (!this.defending || !this.shield) this.animated?.anims.resume();
             if (this.defending) this.shield?.anims.resume();
         }
+    }
+
+    // The ordinary idle loop deliberately skips the blink pose (index 2).
+    // Display it for a short beat every few seconds, and only while idle.
+    private advanceIdleBlink(dt: number): void {
+        if (!this.animated || dt <= 0) return;
+        if (this.blinkRemaining > 0) {
+            this.blinkRemaining = Math.max(0, this.blinkRemaining - dt);
+            if (this.blinkRemaining === 0) {
+                this.animated.anims.resume();
+                this.animated.setFrame(0);
+            }
+            return;
+        }
+        this.idleElapsed += dt;
+        if (this.idleElapsed < this.nextBlinkAfter) return;
+        this.animated.anims.pause();
+        this.animated.setFrame(2);
+        this.blinkRemaining = 0.12;
+        this.idleElapsed = 0;
+        this.blinkCount++;
+        this.nextBlinkAfter = this.blinkCount % 2 ? 5.2 : 3.8;
+    }
+
+    private resetIdleBlink(): void {
+        this.idleElapsed = 0;
+        if (this.blinkRemaining > 0) this.animated?.anims.resume();
+        this.blinkRemaining = 0;
     }
 
     private restoreScale(): void {
