@@ -12,7 +12,8 @@ import { WEAPONS } from '../weapons/definitions';
 import { SWORD_SLASH_EFFECT, hasSwordSlashEffect, CANDY_PROJECTILE_EFFECT, hasCandyProjectileEffect } from '../weapons/slashEffect';
 
 type Projectile = { sprite: Phaser.GameObjects.Container; speed: number; remaining: number;
-    damage: number; halfWidth: number; halfHeight: number; direction: -1 | 1 };
+    damage: number; halfWidth: number; halfHeight: number; direction: -1 | 1;
+    visual?: Phaser.GameObjects.Sprite; flightSeconds: number };
 
 export class CombatSystem {
     private projectiles: Projectile[] = [];
@@ -85,7 +86,10 @@ export class CombatSystem {
                 const image = this.scene.add.sprite(0, 0, effect.key, 0)
                     .setOrigin(0.5).setScale(0.3).setFlipX(direction === -1);
                 sprite.add(image);
-                image.play(effect.animationKey);
+                // Frames 1-2 start the spell; frame 3 holds mid-flight, and
+                // frame 4 holds after sustained travel. Frames 5-6 are impact only.
+                // Keep animation independent from hit detection and world movement.
+                // Projectile phases are assigned in update() from flight time.
             } else {
                 sprite.add([
                     this.scene.add.rectangle(0, 0, 20, 9, 0xffffff).setAngle(-20),
@@ -94,7 +98,9 @@ export class CombatSystem {
             }
             this.projectiles.push({ sprite, speed: definition.projectileSpeed,
                 remaining: this.run.weapon.range, damage: this.run.weapon.damage,
-                halfWidth: definition.hitHalfWidth, halfHeight: definition.hitHalfHeight, direction });
+                halfWidth: definition.hitHalfWidth, halfHeight: definition.hitHalfHeight, direction,
+                visual: hasCandyProjectileEffect(this.scene) ?
+                    sprite.list[0] as Phaser.GameObjects.Sprite : undefined, flightSeconds: 0 });
             return;
         }
         const range = this.run.weapon.range;
@@ -145,6 +151,22 @@ export class CombatSystem {
         }
     }
 
+    private playCandyImpact(shot: Projectile): void {
+        if (!shot.visual || !hasCandyProjectileEffect(this.scene)) return;
+        const effect = CANDY_PROJECTILE_EFFECT;
+        // Impact is visual only: collision, damage and projectile removal are
+        // handled once by the existing swept-hit logic.
+        const impact = this.scene.add.sprite(shot.sprite.x, shot.sprite.y, effect.key, 4)
+            .setDepth(7).setScrollFactor(1).setOrigin(0.5)
+            .setScale(0.3).setFlipX(shot.direction === -1);
+        this.slashes.add(impact);
+        impact.once('animationcomplete', () => {
+            this.slashes.delete(impact);
+            impact.destroy();
+        });
+        impact.play(effect.animationKey);
+    }
+
     private playSlashEffect(range: number, direction: -1 | 1): void {
         const effect = SWORD_SLASH_EFFECT;
         // Centre the effect canvas over [0, range] in the attack direction.
@@ -177,6 +199,12 @@ export class CombatSystem {
         if (this.run.phase !== 'playing') return;
         for (let i = this.projectiles.length - 1; i >= 0; i--) {
             const shot = this.projectiles[i];
+            shot.flightSeconds += dt;
+            if (shot.visual) {
+                const t = shot.flightSeconds;
+                const frame = t < 0.045 ? 0 : t < 0.10 ? 1 : t < 0.28 ? 2 : 3;
+                shot.visual.setFrame(frame);
+            }
             const fromX = shot.sprite.x;
             const step = Math.min(shot.remaining, shot.speed * dt);
             const toX = fromX + step * shot.direction;
@@ -208,6 +236,7 @@ export class CombatSystem {
             if (enemyFirst || terrainHit || shot.remaining <= 0 ||
                 shot.sprite.x > this.scene.cameras.main.scrollX + this.scene.cameras.main.width + 50 ||
                 shot.sprite.x < this.scene.cameras.main.scrollX - 50) {
+                if (enemyFirst || terrainHit) this.playCandyImpact(shot);
                 shot.sprite.destroy();
                 this.projectiles.splice(i, 1);
             }
