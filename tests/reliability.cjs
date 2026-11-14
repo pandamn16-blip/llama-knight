@@ -875,7 +875,7 @@ function installCharacterSprites(scene, width, height, missingFrame, selectedPac
     const candy = CHARACTER_SPRITES.candy.animations;
     assert.equal(candy.run.fps, 8);
     assert.equal(candy.idle.fps, 5);
-    assert.deepEqual(animations.get('candy:idle').frames.map(f => f.frame), [0, 1, 3, 1]);
+    assert.equal(JSON.stringify(animations.get('candy:idle').frames.map(f => f.frame)), JSON.stringify([0, 1, 3, 1]));
     assert.equal(candy.jump.end, 3); assert.equal(candy.jump.repeat, 0);
     assert.equal(candy.fall.start, 4); assert.equal(candy.fall.end, 4);
     assert.equal(animations.get('candy:jump').frames.at(-1).frame, 3);
