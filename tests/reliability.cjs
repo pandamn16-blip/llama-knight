@@ -905,9 +905,38 @@ function installCharacterSprites(scene, width, height, missingFrame, selectedPac
     art.anims.isPlaying = false;
     player.update(controls, 0.01);
     assert.equal(art.scale, 0.5);
+
+    // Regression from the 14 Nov recording: attacking during a jump,
+    // entering descent mid-cast, and moving must never shrink the casting art.
+    g.run.onGround = false; g.run.velocityY = -250;
+    player.update({ ...controls, right: true }, 0.015);
+    player.showAttack();
+    assert.equal(art.animationKey, 'candy:attack');
+    assert.equal(art.scale, 0.64);
+    g.run.velocityY = 120;
+    player.update({ ...controls, right: true }, 0.015);
+    assert.equal(art.animationKey, 'candy:attack');
+    assert.equal(art.scale, 0.64, 'Candy must remain full-size while attack overlaps falling');
+    art.anims.isPlaying = false;
+    player.update({ ...controls, right: true }, 0.015);
+    assert.equal(art.animationKey, 'candy:fall');
+    assert.equal(art.scale, 0.5, 'Resize only after falling animation has replaced attack');
+
+    // Attack can also overlap landing: the deferred landing frame should
+    // replace the full-size casting artwork when the attack finishes.
+    player.showAttack();
+    g.run.onGround = true; g.run.velocityY = 0;
+    player.visual.update(g.run, true, 0.015);
+    assert.equal(art.animationKey, 'candy:attack');
+    assert.equal(art.scale, 0.64);
+    art.anims.isPlaying = false;
+    player.visual.update(g.run, true, 0.015);
+    assert.equal(art.textureKey, 'candy-jump');
+    assert.equal(art.frame, 5);
+    assert.equal(art.scale, 0.5);
     g.events.emit('shutdown');
 }
-console.log('PASS Candy animation: slower run, held ascent/fall/landing frames and temporary attack scale.');
+console.log('PASS Candy animation: slower run, physics-driven jump, occasional blink, full-size airborne casting and deferred landing.');
 
 // Scale/origin/offset adjustments do not change movement or any run-state field.
 {
