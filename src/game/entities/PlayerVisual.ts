@@ -133,7 +133,10 @@ export class PlayerVisual {
         // Keep the current visual size until its replacement frame is installed.
         // Resetting scale here caused a one-frame shrink of the *attack art*
         // when the casting animation finished while Candy was falling.
-        if (candy && justLanded) {
+        // If the attack finished after the physics landing event, show the
+        // queued landing pose instead of keeping the last casting frame.
+        if (candy && !airborne && this.landingSeconds > 0 &&
+            (justLanded || this.state !== undefined)) {
             this.animated.anims.stop();
             this.animated.setTexture('candy-jump', 5);
             this.setVisualScale('fall');
