@@ -998,7 +998,7 @@ console.log('PASS sprite integration: exact sheet/frame validation, animation ma
         g.load = { spritesheet: (...args) => queued.push(args) };
         loadCharacterSheets(g);
         assert.equal(queued.length, 14); // Seven temporary Llama sources plus seven Candy sources.
-        assert.equal(new Set(queued.map(args => args[0])).size, 7);
+        assert.equal(new Set(queued.map(args => args[0])).size, 14);
         registerCharacterAnimations(g);
         assert.equal(animations.size, 7);
         for (const state of states) {
