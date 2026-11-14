@@ -1,7 +1,7 @@
 import type { Scene, GameObjects } from 'phaser';
 import { CHARACTER_SHIELDS, hasShieldSheet } from '../characters/shield';
 import type { CharacterVisual } from '../characters/definitions';
-import { CHARACTER_SPRITES, hasCharacterSheet, resolveCharacterAnimation } from '../characters/spriteAnimations';
+import { CHARACTER_SPRITES, hasCharacterSheet, hasCandyLevelUp, resolveCharacterAnimation } from '../characters/spriteAnimations';
 import type { PlayerAnimation, CharacterSpriteSheet } from '../characters/spriteAnimations';
 import type { RunState, RunPhase } from '../state/RunState';
 
@@ -61,7 +61,7 @@ export class PlayerVisual {
     private animated?: GameObjects.Sprite;
     private sheet?: CharacterSpriteSheet;
     private state?: PlayerAnimation;
-    private action?: 'attack' | 'hurt' | 'death';
+    private action?: 'attack' | 'hurt' | 'death' | 'levelup';
     private placeholderParts: { object: GameObjects.Shape; x: number; scaleX: number }[] = [];
 
     constructor(private scene: Scene, x: number, y: number, visual: CharacterVisual) {
@@ -126,6 +126,15 @@ export class PlayerVisual {
         this.setDefending(false);
         this.action = action;
         return this.play(action, true);
+    }
+
+    showLevelUp(): void {
+        if (!this.animated || this.sheet?.key !== 'candy' ||
+            !hasCandyLevelUp(this.scene) || this.action === 'death') return;
+        this.setDefending(false);
+        this.action = 'levelup';
+        this.state = undefined;
+        this.animated.play('candy:levelup', true);
     }
 
     get attackIncludesWeaponEffect(): boolean {
