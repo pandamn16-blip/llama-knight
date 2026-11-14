@@ -126,6 +126,9 @@ export class PlayerVisual {
         if (justLanded) this.landingSeconds = this.landingDuration;
         if (this.action && this.animated.anims.isPlaying) return;
         this.action = undefined;
+        // A finished casting action must never leave Candy enlarged in idle,
+        // including when the following animation state hasn't changed.
+        this.restoreScale();
         if (candy && justLanded) {
             this.restoreScale();
             this.animated.anims.stop();
