@@ -81,6 +81,6 @@ export class Player {
             } else this.sprite.y = nextFoot - footOffset;
         }
         this.visual.setDefending(this.isShielding);
-        this.visual.update(this.run, this.sprite.x !== previousX);
+        this.visual.update(this.run, this.sprite.x !== previousX, dt);
     }
 }
