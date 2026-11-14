@@ -62,6 +62,9 @@ export class PlayerVisual {
     private sheet?: CharacterSpriteSheet;
     private state?: PlayerAnimation;
     private action?: 'attack' | 'hurt' | 'death' | 'levelup';
+    private wasAirborne = false;
+    private landingSeconds = 0;
+    private readonly landingDuration = 0.14;
     private placeholderParts: { object: GameObjects.Shape; x: number; scaleX: number }[] = [];
 
     constructor(private scene: Scene, x: number, y: number, visual: CharacterVisual) {
@@ -112,11 +115,30 @@ export class PlayerVisual {
         }
     }
 
-    update(run: RunState, moving: boolean): void {
+    update(run: RunState, moving: boolean, dt = 0): void {
         if (!this.animated || this.action === 'death' || (this.defending && this.shield)) return;
+        // Physics drives vertical movement. Candy's jump strip only supplies poses:
+        // frames 1-4 ascend (hold 4), 5 is descending, 6 is a brief landing pose.
+        const candy = this.sheet?.key === 'candy';
+        const airborne = !run.onGround;
+        const justLanded = candy && this.wasAirborne && !airborne;
+        this.wasAirborne = airborne;
+        if (justLanded) this.landingSeconds = this.landingDuration;
         if (this.action && this.animated.anims.isPlaying) return;
         this.action = undefined;
-        const state = !run.onGround ? (run.velocityY < 0 ? 'jump' : 'fall') : moving ? 'run' : 'idle';
+        if (candy && justLanded) {
+            this.restoreScale();
+            this.animated.anims.stop();
+            this.animated.setTexture('candy-jump', 5);
+            this.state = undefined;
+            return;
+        }
+        if (candy && this.landingSeconds > 0 && !airborne) {
+            this.landingSeconds = Math.max(0, this.landingSeconds - dt);
+            if (this.landingSeconds > 0) return;
+        }
+        if (airborne) this.landingSeconds = 0;
+        const state = airborne ? (run.velocityY < 0 ? 'jump' : 'fall') : moving ? 'run' : 'idle';
         this.play(state);
     }
 
@@ -125,6 +147,9 @@ export class PlayerVisual {
         if (action === 'attack' && this.action === 'hurt' && this.animated.anims.isPlaying) return false;
         this.setDefending(false);
         this.action = action;
+        // Casting artwork occupies less of its 256px cell than Candy's idle art.
+        // Adjust only its rendering scale; preserve player collision/physics.
+        if (this.sheet?.key === 'candy') this.animated.setScale(action === 'attack' ? this.sheet.scale * 1.2 : this.sheet.scale);
         return this.play(action, true);
     }
 
@@ -151,11 +176,16 @@ export class PlayerVisual {
         }
     }
 
+    private restoreScale(): void {
+        if (this.animated && this.sheet?.key === 'candy') this.animated.setScale(this.sheet.scale);
+    }
+
     private play(state: PlayerAnimation, restart = false): boolean {
         if (!this.animated || !this.sheet) return false;
         const key = `${this.sheet.key}:${state}`;
         if (!this.scene.anims.exists(key)) return false;
         if (restart || this.state !== state) {
+            if (!restart) this.restoreScale();
             this.animated.play(key, !restart);
             this.state = state;
         }
