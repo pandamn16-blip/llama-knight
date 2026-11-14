@@ -40,7 +40,7 @@ export const CHARACTER_SPRITES: Partial<Record<CharacterVisual, CharacterSpriteS
         format: 'separate', key: 'candy',
         scale: 0.5, originX: FOOT_ORIGIN.x, originY: FOOT_ORIGIN.y, offsetX: 0, offsetY: 40,
         animations: {
-            idle: { start: 0, end: 3, fps: 3, repeat: -1,
+            idle: { start: 0, end: 3, fps: 5, repeat: -1,
                 sheet: { key: 'candy-idle', path: 'characters/candy/idle.png',
                     width: 1024, height: 256, frameWidth: 256, frameHeight: 256 } },
             run: { start: 0, end: 5, fps: 8, repeat: -1,
@@ -137,7 +137,11 @@ export function registerCharacterAnimations(scene: Scene): void {
             const key = `${pack.key}:${state}`;
             if (scene.anims.exists(key)) continue;
             scene.anims.create({ key,
-                frames: scene.anims.generateFrameNumbers(source.key, { start: animation.start, end: animation.end }),
+                // Frame 3 (index 2) is Candy's blink. Exclude it from the
+                // ordinary idle cycle; PlayerVisual inserts it occasionally.
+                frames: pack.key === 'candy' && state === 'idle'
+                    ? scene.anims.generateFrameNumbers(source.key, { frames: [0, 1, 3, 1] })
+                    : scene.anims.generateFrameNumbers(source.key, { start: animation.start, end: animation.end }),
                 frameRate: animation.fps, repeat: animation.repeat
             });
         }
