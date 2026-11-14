@@ -723,9 +723,9 @@ console.log('PASS focused balance: 2-damage/500 ms forward sword sector, multi-t
 
 // Optional sprite sheets never replace a working placeholder with invalid frames.
 const { CHARACTER_SPRITES, hasCharacterSheet, loadCharacterSheets, registerCharacterAnimations } = load('characters/spriteAnimations');
-function installCharacterSprites(scene, width, height, missingFrame) {
+function installCharacterSprites(scene, width, height, missingFrame, selectedPack = CHARACTER_SPRITES.llama) {
     const animations = new Map();
-    const pack = CHARACTER_SPRITES.llama;
+    const pack = selectedPack;
     const { animationSource } = load('rendering/spriteAssets');
     const sources = new Map();
     for (const state of Object.keys(pack.animations)) {
@@ -755,8 +755,11 @@ function installCharacterSprites(scene, width, height, missingFrame) {
         sprite.setFlipX = value => { sprite.flipX = value; return sprite; };
         sprite.setOrigin = (ox, oy) => { sprite.originX = ox; sprite.originY = oy; return sprite; };
         sprite.setScale = scale => { sprite.scale = scale; return sprite; };
+        sprite.setFrame = frame => { sprite.frame = frame; return sprite; };
+        sprite.setTexture = (key, frame) => { sprite.texture = { key }; sprite.textureKey = key; sprite.frame = frame; return sprite; };
         sprite.anims = {
             isPlaying: false, paused: false,
+            stop() { this.isPlaying = false; },
             pause() { if (!this.paused) { this.wasPlaying = this.isPlaying; this.isPlaying = false; this.paused = true; } },
             resume() { if (this.paused) { this.isPlaying = this.wasPlaying; this.paused = false; } }
         };
@@ -861,6 +864,39 @@ function installCharacterSprites(scene, width, height, missingFrame) {
     assert.equal(new Player(g, createRunState('candy'), g.groundY).sprite.children.length, 11);
     g.events.emit('shutdown');
 }
+
+// Candy's jump is physics-driven: ascent frames 1-4 do not loop,
+// frame 5 is held in descent, and frame 6 appears only after landing.
+// Casting may enlarge the artwork but may never change the player hitbox.
+{
+    const { game: g } = fixture('candy');
+    const animations = installCharacterSprites(g, undefined, undefined, undefined, CHARACTER_SPRITES.candy);
+    registerCharacterAnimations(g);
+    const candy = CHARACTER_SPRITES.candy.animations;
+    assert.equal(candy.run.fps, 8);
+    assert.equal(candy.jump.end, 3); assert.equal(candy.jump.repeat, 0);
+    assert.equal(candy.fall.start, 4); assert.equal(candy.fall.end, 4);
+    assert.equal(animations.get('candy:jump').frames.at(-1).frame, 3);
+    const player = new Player(g, g.run, g.groundY), art = player.sprite.children[0];
+    const controls = { left: false, right: false, jump: false };
+    g.run.onGround = false; g.run.velocityY = -500;
+    player.update(controls, 0.05); assert.equal(art.animationKey, 'candy:jump');
+    g.run.velocityY = 40;
+    player.update(controls, 0.01); assert.equal(art.animationKey, 'candy:fall');
+    assert.equal(art.frame, undefined); // Fall's only animated frame is index 4.
+    g.run.onGround = true; g.run.velocityY = 0;
+    player.update(controls, 0.01);
+    assert.equal(art.textureKey, 'candy-jump'); assert.equal(art.frame, 5);
+    player.update(controls, 0.2);
+    assert.equal(art.animationKey, 'candy:idle');
+    player.showAttack();
+    assert.equal(art.scale, 0.6);
+    art.anims.isPlaying = false;
+    player.update(controls, 0.01);
+    assert.equal(art.scale, 0.5);
+    g.events.emit('shutdown');
+}
+console.log('PASS Candy animation: slower run, held ascent/fall/landing frames and temporary attack scale.');
 
 // Scale/origin/offset adjustments do not change movement or any run-state field.
 {
